@@ -1,0 +1,14 @@
+node_modules/
+dist/
+out/
+*.ipk
+.DS_Store
+*.log
+.vite/
+
+# dev screenshots
+image.png
+immich-webos.png
+immich.png
+*.png
+!public/*.png

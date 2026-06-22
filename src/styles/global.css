@@ -1,0 +1,508 @@
+/* TV UI at 1280x720 logical px (webOS default), scales to 1080p/4K via the
+   fixed viewport meta. Colors are Immich's own dark-theme tokens lifted from
+   web/src/app.css so the look matches the desktop web UI. */
+
+:root {
+  --immich-primary: #4250af;
+  --immich-dark-primary: #accbfa; /* accent on dark bg */
+  --bg: #0a0a0a;
+  --fg: #e5e7eb;
+  --gray: #212121;
+  --surface: #18181b;
+  --surface-2: #232329;
+  --muted: #8a8a92;
+  --focus: var(--immich-dark-primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Focus ring — the key TV affordance. Accent matches Immich's dark primary. */
+.focusable:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+  z-index: 3;
+  position: relative;
+}
+.focusable {
+  transition: box-shadow 0.08s ease, transform 0.08s ease;
+  cursor: pointer;
+}
+
+.msg {
+  padding: 48px;
+  font-size: 26px;
+  color: var(--muted);
+}
+.msg.error {
+  color: #ff6b6b;
+}
+
+/* ---------- Login ---------- */
+.login {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.login-title {
+  font-size: 60px;
+  margin: 0 0 32px;
+  letter-spacing: 1px;
+}
+.login-form {
+  width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 21px;
+  color: var(--muted);
+}
+.input {
+  font-size: 25px;
+  padding: 15px 18px;
+  border-radius: 12px;
+  border: 2px solid var(--surface-2);
+  background: var(--surface);
+  color: #fff;
+}
+.input:focus {
+  border-color: var(--immich-primary);
+}
+.btn-primary {
+  font-size: 26px;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
+  background: var(--immich-primary);
+  color: #fff;
+  margin-top: 6px;
+}
+.login-error {
+  color: #ff6b6b;
+  font-size: 19px;
+}
+
+/* ---------- Shell ---------- */
+.home {
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Sidebar: collapsed icon rail, expands to labeled menu on left-edge nav. */
+.sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 5;
+  background: var(--surface);
+  border-right: 1px solid var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 0;
+  transition: width 0.18s ease;
+  overflow: hidden;
+}
+.sidebar.collapsed {
+  width: 76px;
+}
+/* collapsed: center icons, hide labels, keep highlight inside the rail */
+.sidebar.collapsed .sidebar-brand,
+.sidebar.collapsed .sidebar-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+  margin-right: 0;
+  border-radius: 0;
+  gap: 0;
+}
+.sidebar.open {
+  width: 300px;
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px 18px;
+  color: var(--fg);
+  font-size: 26px;
+  font-weight: 700;
+}
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.sidebar-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 26px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 21px;
+  text-align: left;
+  white-space: nowrap;
+  border-radius: 0 24px 24px 0;
+  margin-right: 12px;
+}
+.sidebar-item.active {
+  background: rgba(66, 80, 175, 0.3); /* immich primary @ 30% (no color-mix: webOS Cr68) */
+  color: #fff;
+}
+.sidebar-item.active svg {
+  color: var(--immich-dark-primary);
+}
+.sidebar-item.user {
+  color: var(--muted);
+}
+/* labels hidden when collapsed */
+.sidebar.collapsed .sidebar-label {
+  opacity: 0;
+  width: 0;
+}
+.sidebar-label {
+  transition: opacity 0.12s ease;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 4;
+}
+
+/* Content shifts right of the collapsed rail; sidebar overlays when open. */
+.content {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 76px;
+  overflow: hidden;
+}
+
+/* ---------- Justified grid ---------- */
+.grid-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 20px 16px 80px;
+}
+.bucket-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 22px 0 10px;
+  color: var(--fg);
+}
+.jrow {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.thumb {
+  position: relative;
+  border: none;
+  padding: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-2);
+  flex: 0 0 auto;
+}
+.thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.thumb-ph {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(110deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
+}
+.bucket-ph {
+  width: 100%;
+}
+.thumb-badge {
+  position: absolute;
+  bottom: 5px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 15px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 7px 2px 4px;
+  border-radius: 6px;
+}
+
+/* ---------- Albums ---------- */
+.album-grid {
+  height: 100%;
+  overflow-y: auto;
+  padding: 28px 24px 80px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px;
+}
+.album-card {
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+.album-cover {
+  position: relative;
+  width: 100%;
+  padding-top: 75%; /* 4:3 aspect, no aspect-ratio (webOS Cr68) */
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.album-cover > * {
+  position: absolute;
+  inset: 0;
+}
+.album-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.album-meta {
+  padding: 10px 4px;
+}
+.album-name {
+  font-size: 21px;
+  font-weight: 600;
+}
+.album-count {
+  font-size: 17px;
+  color: var(--muted);
+}
+
+/* ---------- Search ---------- */
+.search-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 24px 8px;
+  padding: 6px 8px 6px 16px;
+  background: var(--surface);
+  border: 2px solid var(--surface-2);
+  border-radius: 999px;
+}
+.searchbar:focus-within {
+  border-color: var(--immich-primary);
+}
+.searchbar-icon {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.searchbar-input {
+  flex: 1;
+  font-size: 24px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  padding: 10px 4px;
+}
+.searchbar-input:focus {
+  outline: none;
+}
+.searchbar-btn {
+  font-size: 22px;
+  padding: 10px 24px;
+  border-radius: 999px;
+  border: none;
+  background: var(--immich-primary);
+  color: #fff;
+}
+.search-view .grid-scroll {
+  flex: 1;
+}
+
+/* ---------- Fullscreen viewer (photo + video) ---------- */
+.fs {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.fs-img,
+.fs-video {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.fs-video {
+  width: 100%;
+  height: 100%;
+}
+
+/* Overlay: hidden by default, shown when .fs has .show-ui (paused / activity) */
+.fs-ui {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.fs.show-ui .fs-ui {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fs-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+}
+.fs-top-right {
+  display: flex;
+  gap: 12px;
+}
+
+.fs-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  color: #fff;
+  background: rgba(40, 40, 46, 0.7);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 10px 18px;
+  cursor: pointer;
+}
+.fs-btn.round {
+  padding: 12px;
+  border-radius: 50%;
+}
+.fs-btn:hover,
+.fs-btn:focus {
+  outline: none;
+  border-color: var(--immich-dark-primary);
+  background: rgba(60, 60, 70, 0.9);
+}
+
+/* side prev/next arrows */
+.fs-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: rgba(20, 20, 24, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+.fs-arrow.left {
+  left: 28px;
+}
+.fs-arrow.right {
+  right: 28px;
+}
+.fs-arrow:hover,
+.fs-arrow:focus {
+  outline: none;
+  border-color: var(--immich-dark-primary);
+  background: rgba(40, 40, 48, 0.85);
+}
+
+/* bottom transport + seek bar */
+.fs-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 56px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 48px;
+}
+.fs-time {
+  font-size: 18px;
+  color: #ddd;
+  min-width: 56px;
+  text-align: center;
+}
+.fs-seek {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+}
+.fs-seek-fill {
+  height: 100%;
+  background: var(--immich-dark-primary);
+}
+
+.fs-counter {
+  position: absolute;
+  bottom: 18px;
+  right: 32px;
+  font-size: 18px;
+  color: #ddd;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 5px 12px;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

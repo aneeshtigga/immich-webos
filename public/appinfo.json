@@ -1,0 +1,17 @@
+{
+  "id": "com.immich.webos",
+  "version": "0.1.0",
+  "vendor": "self",
+  "type": "web",
+  "main": "index.html",
+  "title": "Immich",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#101012",
+  "iconColor": "#4250af",
+  "splashBackground": "splash.png",
+  "disableBackHistoryAPI": true,
+  "supportTouchMode": "none",
+  "handlesRelaunch": true,
+  "requiredPermissions": ["time.query", "internet"]
+}
