@@ -52,6 +52,47 @@ body,
   color: #ff6b6b;
 }
 
+/* ---------- Splash ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.45s ease;
+}
+.splash.leaving {
+  opacity: 0;
+}
+.splash-mark {
+  animation: splash-spin 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.splash-petal {
+  opacity: 0;
+  animation: splash-bloom 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes splash-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes splash-spin {
+  0% {
+    transform: rotate(-90deg) scale(0.8);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
 /* ---------- Login ---------- */
 .login {
   height: 100%;
@@ -60,10 +101,10 @@ body,
   align-items: center;
   justify-content: center;
 }
-.login-title {
-  font-size: 60px;
-  margin: 0 0 32px;
-  letter-spacing: 1px;
+.login-logo {
+  width: 320px;
+  height: auto;
+  margin: 0 0 40px;
 }
 .login-form {
   width: 560px;
@@ -88,6 +129,18 @@ body,
 }
 .input:focus {
   border-color: var(--immich-primary);
+}
+/* Chrome autofill forces its own tiny light styling; restore ours. Dev-only —
+   webOS TV has no password manager so autofill never triggers there. */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  font-size: 25px !important;
+  -webkit-text-fill-color: #fff;
+  caret-color: #fff;
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  box-shadow: 0 0 0 1000px var(--surface) inset;
+  transition: background-color 9999s ease-in-out 0s;
 }
 .btn-primary {
   font-size: 26px;
@@ -176,6 +229,14 @@ body,
   white-space: nowrap;
   border-radius: 0 24px 24px 0;
   margin-right: 12px;
+}
+/* pointer press feedback (magic-remote click / mouse) */
+.sidebar-item {
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+.sidebar-item:active {
+  transform: scale(0.95);
+  background: rgba(66, 80, 175, 0.45);
 }
 .sidebar-item.active {
   background: rgba(66, 80, 175, 0.3); /* immich primary @ 30% (no color-mix: webOS Cr68) */
@@ -329,7 +390,8 @@ body,
   border-radius: 999px;
 }
 .searchbar:focus-within {
-  border-color: var(--immich-primary);
+  border-color: var(--immich-dark-primary);
+  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.25);
 }
 .searchbar-icon {
   color: var(--muted);
@@ -343,8 +405,12 @@ body,
   color: #fff;
   padding: 10px 4px;
 }
-.searchbar-input:focus {
+/* the rounded pill (.searchbar) shows the focus glow via :focus-within,
+   so suppress the global square ring on the input itself */
+.searchbar-input:focus,
+.searchbar-input.focusable:focus {
   outline: none;
+  box-shadow: none;
 }
 .searchbar-btn {
   font-size: 22px;

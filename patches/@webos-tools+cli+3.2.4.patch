@@ -1,0 +1,22 @@
+diff --git a/node_modules/@webos-tools/cli/lib/package.js b/node_modules/@webos-tools/cli/lib/package.js
+index 6875b58..6ca0c8a 100644
+--- a/node_modules/@webos-tools/cli/lib/package.js
++++ b/node_modules/@webos-tools/cli/lib/package.js
+@@ -19,7 +19,16 @@ const ar = require('ar-async'),
+     mkdirp = require('mkdirp'),
+     log = require('npmlog'),
+     path = require('path'),
+-    rimraf = require('rimraf'),
++    rimraf = (function() {
++        // rimraf v4+ exports { rimraf, rimrafSync } and is not directly
++        // callable; this cli calls it v3-style as rimraf(path, cb). Adapt.
++        var r = require('rimraf');
++        if (typeof r === 'function') { return r; }
++        return function(p, cb) {
++            try { (r.rimrafSync || r.sync)(p); if (cb) { cb(null); } }
++            catch (e) { if (cb) { cb(e); } }
++        };
++    })(),
+     shelljs = require('shelljs'),
+     stripbom = require('strip-bom'),
+     temp = require('temp'),

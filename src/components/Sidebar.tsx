@@ -1,5 +1,6 @@
 import { Icon } from './Icon';
 import { IconName } from './icons';
+import { ImmichLogo } from './ImmichLogo';
 
 export type Route = 'timeline' | 'albums' | 'favorites' | 'search';
 
@@ -31,7 +32,7 @@ export function Sidebar({ open, active, userName, onNavigate, onLogout }: Props)
   return (
     <aside class={'sidebar ' + (open ? 'open' : 'collapsed')}>
       <div class="sidebar-brand">
-        <Icon name="menu" size={26} />
+        <ImmichLogo size={30} />
         <span class="sidebar-label">Immich</span>
       </div>
 

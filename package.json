@@ -9,9 +9,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "package": "npm run build && ares-package dist -o out",
-    "install-tv": "ares-install --device tv ./out/*.ipk",
-    "launch": "ares-launch --device tv com.immich.webos",
-    "deploy": "npm run package && npm run install-tv && npm run launch"
+    "install-tv": "ares-install --device lg_c2 ./out/com.immich.webos_0.1.0_all.ipk",
+    "launch": "ares-launch --device lg_c2 com.immich.webos",
+    "deploy": "npm run package && npm run install-tv && npm run launch",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@preact/preset-vite": "^2.9.0",
     "@webos-tools/cli": "^3.1.0",
+    "patch-package": "^8.0.1",
     "typescript": "^5.5.0",
     "vite": "^5.4.0"
   }

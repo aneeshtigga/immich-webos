@@ -2,6 +2,7 @@ import { useState, useRef } from 'preact/hooks';
 import { login } from '../api/client';
 import { getServer, saveSession, normalizeServer } from '../auth/store';
 import { useRemote } from '../nav/useRemote';
+import { exitApp } from '../nav/exit';
 
 // Login screen. Server URL is prefilled (see auth/store DEFAULT_SERVER) so the
 // common case is just email + password. On-screen keyboard is the webOS system
@@ -14,8 +15,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Inputs handle their own arrow keys; only intercept Back here.
-  useRemote({ onBack: () => {} });
+  // Inputs handle their own arrow keys; Back quits via webOS's native exit.
+  useRemote({ onBack: () => exitApp() });
 
   async function submit(e: Event) {
     e.preventDefault();
@@ -45,7 +46,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div class="login">
-      <h1 class="login-title">Immich</h1>
+      <img class="login-logo" src="./immich-logo-inline.svg" alt="Immich" />
       <form ref={formRef} class="login-form" onSubmit={submit}>
         <label class="field">
           <span>Server URL</span>

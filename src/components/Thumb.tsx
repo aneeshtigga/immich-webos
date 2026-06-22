@@ -50,6 +50,7 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
     <button
       ref={ref}
       data-focusable
+      data-seq
       class="thumb focusable"
       style={{ width: `${width}px`, height: `${height}px` }}
       onClick={onSelect}

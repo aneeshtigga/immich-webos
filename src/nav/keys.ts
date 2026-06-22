@@ -9,6 +9,7 @@ export const Key = {
   Enter: 13,
   Back: 461,
   BackAlt: 10009,
+  Escape: 27, // dev: stands in for the remote Back key in a PC browser
   Play: 415,
   Pause: 19,
   PlayPause: 463,
@@ -35,5 +36,5 @@ export function dirFromKey(code: number): Direction | null {
 }
 
 export function isBack(code: number): boolean {
-  return code === Key.Back || code === Key.BackAlt;
+  return code === Key.Back || code === Key.BackAlt || code === Key.Escape;
 }

@@ -18,6 +18,7 @@ import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
 import { useRemote } from '../nav/useRemote';
 import { setRoot, focusables } from '../nav/focus';
+import { exitApp } from '../nav/exit';
 
 interface Viewer {
   assets: Asset[];
@@ -37,52 +38,77 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const user = getUser();
 
+  // open the sidebar and focus its currently-active tab
+  const openSidebarFocusActive = () => {
+    setSidebarOpen(true);
+    setTimeout(() => {
+      const items = focusables().filter((e) => e.hasAttribute('data-sidebar'));
+      const active = items.find((e) => e.classList.contains('active'));
+      (active || items[0])?.focus();
+    }, 0);
+  };
+
   useEffect(() => {
     setRoot(rootRef.current);
     // keep focus in the content area; sidebar only gets focus when revealed
-    if (!viewer) setTimeout(focusFirstContent, 0);
+    if (!viewer) setTimeout(() => focusFirstContent(), 0);
   }, [route, album, viewer]);
 
   const openViewer = useCallback((assets: Asset[], index: number) => {
     setViewer({ assets, index });
   }, []);
 
-  const focusFirstContent = () => {
+  // Focus the first content (non-sidebar) focusable. The grid loads its first
+  // bucket asynchronously, so retry for a short window until a thumbnail exists
+  // rather than giving up on the first (empty) tick.
+  const focusFirstContent = (attempt = 0) => {
     const el = focusables().find((e) => !e.hasAttribute('data-sidebar'));
-    if (el) el.focus();
+    if (el) {
+      el.focus();
+    } else if (attempt < 30) {
+      setTimeout(() => focusFirstContent(attempt + 1), 100);
+    }
   };
 
   const onEdge = useCallback((dir: string) => {
     if (dir === 'left' && !sidebarOpen) {
-      setSidebarOpen(true);
-      // focus the sidebar after it expands
-      setTimeout(() => {
-        const el = focusables().find((e) => e.hasAttribute('data-sidebar'));
-        if (el) el.focus();
-      }, 0);
+      openSidebarFocusActive();
     } else if (dir === 'right' && sidebarOpen) {
       setSidebarOpen(false);
-      setTimeout(focusFirstContent, 0);
+      setTimeout(() => focusFirstContent(), 0);
     }
   }, [sidebarOpen]);
 
+  // Back hierarchy:
+  //  viewer        -> close to grid (Fullscreen handles its own Back; this is
+  //                   the fallback if it ever bubbles up)
+  //  album open    -> back to album list
+  //  sidebar open  -> quit via webOS's native exit
+  //  grid (closed) -> open sidebar, focus the active tab
   const onBack = useCallback(() => {
-    if (viewer) setViewer(null);
-    else if (album) setAlbum(null);
-    else if (sidebarOpen) {
-      setSidebarOpen(false);
-      setTimeout(focusFirstContent, 0);
+    if (viewer) {
+      setViewer(null);
+    } else if (album) {
+      setAlbum(null);
+    } else if (sidebarOpen) {
+      exitApp();
+    } else {
+      openSidebarFocusActive();
     }
   }, [viewer, album, sidebarOpen]);
 
-  // disable the grid/sidebar remote handler while the fullscreen viewer owns keys
+  // disable the grid/sidebar remote handler while a fullscreen overlay
+  // (viewer or exit dialog) owns the keys
   useRemote({ onBack, onEdge, enabled: !viewer });
 
   const navigate = (r: Route) => {
     setAlbum(null);
     setRoute(r);
     setSidebarOpen(false);
-    setTimeout(focusFirstContent, 0);
+    // drop focus off the clicked nav button (pointer clicks otherwise keep it
+    // focused) and move focus to the content grid
+    (document.activeElement as HTMLElement | null)?.blur();
+    setTimeout(() => focusFirstContent(), 0);
   };
 
   const doLogout = async () => {
