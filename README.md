@@ -2,7 +2,7 @@
 
 A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch. Built with [Preact](https://preactjs.com/) + [Vite](https://vitejs.dev/), driven entirely by the LG remote.
 
-> **Unofficial.** This project is not affiliated with Immich or LG. It talks to your own self-hosted Immich server.
+> Unofficial — "Immich" and its logo belong to the [Immich project](https://immich.app). 💙
 
 [![Download latest .ipk](https://img.shields.io/github/v/release/aneeshtigga/immich-webos?label=Download%20.ipk&logo=lg&style=for-the-badge)](https://github.com/aneeshtigga/immich-webos/releases/latest/download/com.immich.webos.ipk)
 
