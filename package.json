@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "description": "Native webOS TV app for browsing an Immich photo/video server",
   "private": true,
+  "license": "MIT",
+  "author": "Aneesh Tigga",
   "type": "module",
   "scripts": {
     "dev": "vite",
