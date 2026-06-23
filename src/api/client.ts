@@ -185,24 +185,88 @@ interface AssetResponseDto {
   exifInfo?: { exifImageWidth?: number; exifImageHeight?: number };
 }
 
+function mapAsset(a: AssetResponseDto): import('./assets').Asset {
+  const isImage = a.type === 'IMAGE';
+  const w = a.width || a.exifInfo?.exifImageWidth || 1;
+  const h = a.height || a.exifInfo?.exifImageHeight || 1;
+  return {
+    id: a.id,
+    isImage,
+    isVideo: !isImage,
+    duration: a.duration,
+    ratio: h > 0 ? w / h : 1,
+    createdAt: a.fileCreatedAt || '',
+  };
+}
+
+// Natural-language search ("beach sunset", "dog"). POST /search/smart.
 export async function smartSearch(query: string): Promise<import('./assets').Asset[]> {
   const res = await jsonReq<{ assets: { items: AssetResponseDto[] } }>(
     '/search/smart',
     { method: 'POST', body: JSON.stringify({ query }) },
   );
-  return res.assets.items.map((a) => {
-    const isImage = a.type === 'IMAGE';
-    const w = a.width || a.exifInfo?.exifImageWidth || 1;
-    const h = a.height || a.exifInfo?.exifImageHeight || 1;
-    return {
-      id: a.id,
-      isImage,
-      isVideo: !isImage,
-      duration: a.duration,
-      ratio: h > 0 ? w / h : 1,
-      createdAt: a.fileCreatedAt || '',
-    };
-  });
+  return res.assets.items.map(mapAsset);
+}
+
+// Structured search by metadata facets (personIds, city, …). POST /search/metadata.
+async function metadataSearch(
+  body: Record<string, unknown>,
+): Promise<import('./assets').Asset[]> {
+  const res = await jsonReq<{ assets: { items: AssetResponseDto[] } }>(
+    '/search/metadata',
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+  return res.assets.items.map(mapAsset);
+}
+
+// --- People ---
+
+export interface Person {
+  id: string;
+  name: string;
+}
+
+// Named people for the search browse view (face circles). Unnamed face
+// clusters are omitted — they aren't useful to pick by sight on a TV.
+export async function getPeople(): Promise<Person[]> {
+  const r = await jsonReq<{
+    people: { id: string; name: string; isHidden?: boolean }[];
+  }>('/people?withHidden=false');
+  return (r.people || [])
+    .filter((p) => p.name && !p.isHidden)
+    .map((p) => ({ id: p.id, name: p.name }));
+}
+
+export async function searchByPerson(personId: string): Promise<import('./assets').Asset[]> {
+  return metadataSearch({ personIds: [personId] });
+}
+
+export function personThumbnailUrl(id: string): string {
+  return `${base()}/people/${id}/thumbnail`;
+}
+
+// --- Places (explore aggregation by city) ---
+
+export interface Place {
+  value: string; // city name
+  assetId: string; // representative asset for the cover thumbnail
+}
+
+// GET /search/explore returns grouped aggregations; we surface the city group.
+export async function getPlaces(): Promise<Place[]> {
+  const groups = await jsonReq<
+    { fieldName: string; items: { value: string; data: { id: string } }[] }[]
+  >('/search/explore');
+  const cities = groups.find(
+    (g) => g.fieldName === 'exifInfo.city' || g.fieldName === 'city',
+  );
+  return (cities?.items || [])
+    .filter((i) => i.value && i.data?.id)
+    .map((i) => ({ value: i.value, assetId: i.data.id }));
+}
+
+export async function searchByCity(city: string): Promise<import('./assets').Asset[]> {
+  return metadataSearch({ city });
 }
 
 // --- Binary asset URLs ---

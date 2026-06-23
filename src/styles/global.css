@@ -317,6 +317,25 @@ body,
   overflow: hidden;
 }
 
+/* View transition: each view is wrapped in a keyed .view-enter, so switching
+   tabs replaces the node and replays this fade-up instead of swapping content
+   abruptly. GPU-composited (opacity + transform) so it stays smooth on webOS. */
+.view-enter {
+  height: 100%;
+  animation: view-enter 0.22s ease both;
+  will-change: opacity, transform;
+}
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* ---------- Justified grid ---------- */
 .grid-scroll {
   height: 100%;
@@ -401,6 +420,7 @@ body,
   padding: 0;
   text-align: left;
   color: inherit;
+  border-radius: 12px; /* match .album-cover so the focus ring is rounded */
 }
 .album-cover {
   position: relative;
@@ -470,16 +490,173 @@ body,
   outline: none;
   box-shadow: none;
 }
-.searchbar-btn {
-  font-size: 22px;
-  padding: 10px 24px;
-  border-radius: 999px;
+/* Clear (X) button: focusable, sits at the right of the pill. Right-arrow from
+   the input lands here; left-arrow returns to the input (geometric nav). */
+.searchbar-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
   border: none;
-  background: var(--immich-primary);
-  color: #fff;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--fg);
+  cursor: pointer;
+}
+.searchbar-clear:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus);
+  background: rgba(172, 203, 250, 0.2);
 }
 .search-view .grid-scroll {
   flex: 1;
+}
+
+/* ----- Search browse: People + Places ----- */
+.search-browse {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 24px 80px;
+}
+.browse-section {
+  margin-top: 20px;
+  /* fade the whole section in when its data resolves (people/places fetch
+     completes after the view-enter transition has already finished, so without
+     this the rows snap in) */
+  animation: view-enter 0.28s ease both;
+}
+
+/* each face / place image fades in as its blob finishes loading, instead of
+   popping over the placeholder */
+.fade-img {
+  animation: img-fade 0.3s ease both;
+}
+@keyframes img-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.browse-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  color: var(--fg);
+}
+
+/* People: horizontal row of circular face thumbnails */
+.people-row {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding: 4px 0 12px;
+}
+.person-chip {
+  flex: 0 0 auto;
+  width: 140px;
+  border: none;
+  background: transparent;
+  padding: 6px;
+  color: inherit;
+  border-radius: 16px;
+}
+.person-face {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+  margin: 0 auto;
+}
+.person-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.person-name {
+  margin-top: 8px;
+  font-size: 18px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* circular focus ring on the face (the chip's default square ring would float
+   around the round avatar) */
+.person-chip:focus {
+  outline: none;
+  box-shadow: none;
+}
+.person-chip:focus .person-face {
+  box-shadow: 0 0 0 4px var(--focus);
+}
+
+/* Places: card grid with a city label overlaid on a cover photo */
+.places-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+.place-card {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  border-radius: 12px; /* match .place-cover so the focus ring is rounded */
+}
+.place-cover {
+  position: relative;
+  width: 100%;
+  padding-top: 66%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.place-cover > * {
+  position: absolute;
+  inset: 0;
+}
+.place-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.place-label {
+  inset: auto 0 0 0;
+  padding: 24px 14px 12px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
+}
+
+/* Result header (person/place/text search): back chip + heading */
+.result-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 12px 24px 4px;
+}
+.result-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 19px;
+  color: var(--fg);
+  background: var(--surface);
+  border: 2px solid var(--surface-2);
+  border-radius: 999px;
+  padding: 8px 18px 8px 14px;
+}
+.result-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--fg);
 }
 
 /* ---------- Fullscreen viewer (photo + video) ---------- */

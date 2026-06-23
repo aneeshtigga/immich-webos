@@ -161,26 +161,33 @@ export function Home({ onLogout }: { onLogout: () => void }) {
       {sidebarOpen && <div class="scrim" />}
 
       <main class={'content ' + (sidebarOpen ? 'shifted' : '')}>
-        {album ? (
-          <PhotoGrid
-            key={album.id}
-            loadBuckets={() => getAlbumBuckets(album.id)}
-            loadBucket={(tb) => getAlbumBucket(album.id, tb)}
-            onOpen={openViewer}
-          />
-        ) : route === 'timeline' ? (
-          <PhotoGrid loadBuckets={getTimelineBuckets} loadBucket={getBucket} onOpen={openViewer} />
-        ) : route === 'favorites' ? (
-          <PhotoGrid
-            loadBuckets={getFavoriteBuckets}
-            loadBucket={getFavoriteBucket}
-            onOpen={openViewer}
-          />
-        ) : route === 'search' ? (
-          <Search onOpen={openViewer} />
-        ) : (
-          <Albums onOpenAlbum={(a) => setAlbum(a)} />
-        )}
+        {/* keyed wrapper: changing view replaces it, replaying the fade-in so
+            switching tabs eases in instead of swapping abruptly */}
+        <div class="view-enter" key={album ? 'album:' + album.id : route}>
+          {album ? (
+            <PhotoGrid
+              loadBuckets={() => getAlbumBuckets(album.id)}
+              loadBucket={(tb) => getAlbumBucket(album.id, tb)}
+              onOpen={openViewer}
+            />
+          ) : route === 'timeline' ? (
+            <PhotoGrid
+              loadBuckets={getTimelineBuckets}
+              loadBucket={getBucket}
+              onOpen={openViewer}
+            />
+          ) : route === 'favorites' ? (
+            <PhotoGrid
+              loadBuckets={getFavoriteBuckets}
+              loadBucket={getFavoriteBucket}
+              onOpen={openViewer}
+            />
+          ) : route === 'search' ? (
+            <Search onOpen={openViewer} />
+          ) : (
+            <Albums onOpenAlbum={(a) => setAlbum(a)} />
+          )}
+        </div>
       </main>
     </div>
   );

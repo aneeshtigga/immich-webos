@@ -1,5 +1,17 @@
 import { Asset } from '../api/assets';
 
+export const GRID_GAP = 6;
+
+// Target justified-row height as a fraction of viewport height. The webOS
+// viewport is a fixed 1280x720 logical canvas, so a desktop pixel size like
+// 170px renders tiny from TV-couch distance. ~26% of viewport height yields a
+// few comfortably large rows on screen (a proper 10-foot UI) and tracks the
+// viewport if it ever changes. Shared by the timeline grid and search results.
+export function targetRowHeight(): number {
+  const h = window.innerHeight || 720;
+  return Math.round(Math.max(200, Math.min(320, h * 0.26)));
+}
+
 export interface PlacedAsset extends Asset {
   w: number;
   h: number;

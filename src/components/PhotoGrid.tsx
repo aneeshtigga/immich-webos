@@ -4,25 +4,13 @@ import { TimeBucket, BucketColumns } from '../api/client';
 import { Asset, flattenBucket } from '../api/assets';
 import { Thumb } from './Thumb';
 import { bucketObserver } from './lazyObserver';
-import { justify } from './justified';
+import { justify, targetRowHeight, GRID_GAP as GAP } from './justified';
 
 interface Props {
   // loaders injected so the same grid serves timeline / albums / favorites
   loadBuckets: () => Promise<TimeBucket[]>;
   loadBucket: (timeBucket: string) => Promise<BucketColumns>;
   onOpen: (assets: Asset[], index: number) => void;
-}
-
-const GAP = 6;
-
-// Target justified-row height as a fraction of viewport height. The webOS
-// viewport is a fixed 1280x720 logical canvas (see index.html), so a desktop
-// pixel size like 170px renders tiny from TV-couch distance. Sizing the row to
-// ~26% of viewport height yields ~3 comfortably large rows on screen — a proper
-// 10-foot UI — and tracks the viewport if it ever changes.
-function targetRowHeight(): number {
-  const h = window.innerHeight || 720;
-  return Math.round(Math.max(200, Math.min(320, h * 0.26)));
 }
 
 // Date-bucketed, justified-row photo grid (Immich timeline look). Buckets load

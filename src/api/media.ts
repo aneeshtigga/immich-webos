@@ -7,7 +7,7 @@
 // loads the caller is responsible for revoking (revoke()).
 
 import { authedBlobUrl } from './internal-fetch';
-import { thumbnailUrl } from './client';
+import { thumbnailUrl, personThumbnailUrl } from './client';
 
 const MAX_THUMBS = 300; // ~ a few screens of grid; tune for TV RAM
 const cache = new Map<string, string>(); // assetId -> object URL (insertion order = LRU)
@@ -30,36 +30,47 @@ function runNext(): void {
   job();
 }
 
-export async function loadThumb(id: string): Promise<string> {
-  const hit = cache.get(id);
+// Core cached loader: dedups, LRU-caches, and rate-limits any authed image URL.
+// `key` namespaces the cache so an asset thumb and a person thumb never collide.
+async function loadCached(key: string, url: string): Promise<string> {
+  const hit = cache.get(key);
   if (hit) {
     // refresh LRU position
-    cache.delete(id);
-    cache.set(id, hit);
+    cache.delete(key);
+    cache.set(key, hit);
     return hit;
   }
-  const pending = inflight.get(id);
+  const pending = inflight.get(key);
   if (pending) return pending;
 
   const p = new Promise<string>((resolve, reject) => {
     queue.push(() => {
-      authedBlobUrl(thumbnailUrl(id, 'thumbnail'))
-        .then((url) => {
-          cache.set(id, url);
+      authedBlobUrl(url)
+        .then((u) => {
+          cache.set(key, u);
           evict();
-          resolve(url);
+          resolve(u);
         })
         .catch(reject)
         .finally(() => {
-          inflight.delete(id);
+          inflight.delete(key);
           active--;
           runNext();
         });
     });
     runNext();
   });
-  inflight.set(id, p);
+  inflight.set(key, p);
   return p;
+}
+
+export async function loadThumb(id: string): Promise<string> {
+  return loadCached(id, thumbnailUrl(id, 'thumbnail'));
+}
+
+// Face-cluster thumbnail for the search People row.
+export async function loadPersonThumb(id: string): Promise<string> {
+  return loadCached('person:' + id, personThumbnailUrl(id));
 }
 
 function evict(): void {

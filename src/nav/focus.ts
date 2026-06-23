@@ -76,12 +76,21 @@ export function focus(el: HTMLElement): void {
   retarget(el);
 }
 
-// Nearest scrollable ancestor (the grid / album scroller), or null.
-function scrollParent(el: HTMLElement): HTMLElement | null {
+// Nearest ancestor that actually scrolls on the given axis. Axis-specific
+// because the focused element can live in nested scrollers with different axes
+// — e.g. a person chip sits in a horizontally-scrolling row (.people-row)
+// inside a vertically-scrolling page (.search-browse). Resolving per axis lets
+// a Down press scroll the PAGE while Left/Right scrolls the ROW, instead of
+// both targeting whichever scroller happens to be nearest.
+function scrollParent(el: HTMLElement, axis: 'y' | 'x'): HTMLElement | null {
   let p = el.parentElement;
   while (p && p !== document.body) {
     const s = getComputedStyle(p);
-    if (/(auto|scroll)/.test(s.overflowY + s.overflowX)) return p;
+    const over = axis === 'y' ? s.overflowY : s.overflowX;
+    const scrolls = axis === 'y'
+      ? p.scrollHeight > p.clientHeight
+      : p.scrollWidth > p.clientWidth;
+    if (/(auto|scroll)/.test(over) && scrolls) return p;
     p = p.parentElement;
   }
   return null;
@@ -103,70 +112,79 @@ function scrollParent(el: HTMLElement): HTMLElement | null {
 const EASE = 0.22; // fraction of remaining distance per frame (~150ms glide @60fps)
 const SNAP = 0.5; // px: close enough → finish and stop the loop
 
-let animSc: HTMLElement | null = null;
-let targetTop = 0;
-let targetLeft = 0;
+// Independent glide state per axis: the vertical scroller (the page) and the
+// horizontal scroller (a row) can be different elements, so each animates on
+// its own. `target` is the absolute scroll position being eased toward.
+interface AxisAnim {
+  sc: HTMLElement | null;
+  target: number;
+}
+const animY: AxisAnim = { sc: null, target: 0 };
+const animX: AxisAnim = { sc: null, target: 0 };
 let animRaf = 0;
 
 // Compute the desired absolute scroll position to bring `el` inside the safe
-// zone, set it as the animation target, and ensure the loop is running.
+// zone, set it as the animation target per axis, and ensure the loop runs.
 function retarget(el: HTMLElement): void {
-  const sc = scrollParent(el);
-  if (!sc) {
+  const scY = scrollParent(el, 'y');
+  const scX = scrollParent(el, 'x');
+  if (!scY && !scX) {
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     return;
   }
   const er = el.getBoundingClientRect();
-  const cr = sc.getBoundingClientRect();
 
-  // ~one row/column of breathing room before an edge triggers a scroll.
-  const marginY = Math.min(cr.height * 0.3, er.height + 24);
-  const marginX = Math.min(cr.width * 0.3, er.width + 24);
+  if (scY) {
+    const cr = scY.getBoundingClientRect();
+    const margin = Math.min(cr.height * 0.3, er.height + 24);
+    // Measure against the LIVE target (where we're heading), not the current
+    // mid-glide scroll, so re-targeting mid-animation stays stable.
+    const base = animY.sc === scY ? animY.target : scY.scrollTop;
+    const pend = base - scY.scrollTop;
+    let d = 0;
+    if (er.top - pend < cr.top + margin) d = er.top - pend - (cr.top + margin);
+    else if (er.bottom - pend > cr.bottom - margin) d = er.bottom - pend - (cr.bottom - margin);
+    animY.sc = scY;
+    animY.target = Math.max(0, Math.min(scY.scrollHeight - scY.clientHeight, base + d));
+  }
 
-  // Measure deltas against the LIVE target (where we're heading), not the
-  // current mid-glide scroll, so re-targeting mid-animation stays stable.
-  const baseTop = animSc === sc ? targetTop : sc.scrollTop;
-  const baseLeft = animSc === sc ? targetLeft : sc.scrollLeft;
-  const pendTop = baseTop - sc.scrollTop; // scroll already queued but not yet applied
-  const pendLeft = baseLeft - sc.scrollLeft;
-
-  let dy = 0;
-  if (er.top - pendTop < cr.top + marginY) dy = er.top - pendTop - (cr.top + marginY);
-  else if (er.bottom - pendTop > cr.bottom - marginY) dy = er.bottom - pendTop - (cr.bottom - marginY);
-
-  let dx = 0;
-  if (er.left - pendLeft < cr.left + marginX) dx = er.left - pendLeft - (cr.left + marginX);
-  else if (er.right - pendLeft > cr.right - marginX) dx = er.right - pendLeft - (cr.right - marginX);
-
-  const maxTop = sc.scrollHeight - sc.clientHeight;
-  const maxLeft = sc.scrollWidth - sc.clientWidth;
-  animSc = sc;
-  targetTop = Math.max(0, Math.min(maxTop, baseTop + dy));
-  targetLeft = Math.max(0, Math.min(maxLeft, baseLeft + dx));
+  if (scX) {
+    const cr = scX.getBoundingClientRect();
+    const margin = Math.min(cr.width * 0.3, er.width + 24);
+    const base = animX.sc === scX ? animX.target : scX.scrollLeft;
+    const pend = base - scX.scrollLeft;
+    let d = 0;
+    if (er.left - pend < cr.left + margin) d = er.left - pend - (cr.left + margin);
+    else if (er.right - pend > cr.right - margin) d = er.right - pend - (cr.right - margin);
+    animX.sc = scX;
+    animX.target = Math.max(0, Math.min(scX.scrollWidth - scX.clientWidth, base + d));
+  }
 
   if (!animRaf) animRaf = requestAnimationFrame(tick);
 }
 
+// Ease one axis toward its target; returns true when that axis is still moving.
+function stepAxis(a: AxisAnim, prop: 'scrollTop' | 'scrollLeft'): boolean {
+  const sc = a.sc;
+  if (!sc || !sc.isConnected) {
+    a.sc = null;
+    return false;
+  }
+  const cur = sc[prop];
+  if (Math.abs(a.target - cur) <= SNAP) {
+    sc[prop] = a.target;
+    a.sc = null;
+    return false;
+  }
+  sc[prop] = cur + (a.target - cur) * EASE;
+  return true;
+}
+
 function tick(): void {
   animRaf = 0;
-  const sc = animSc;
-  if (!sc || !sc.isConnected) {
-    animSc = null;
-    return;
-  }
-  const ny = sc.scrollTop + (targetTop - sc.scrollTop) * EASE;
-  const nx = sc.scrollLeft + (targetLeft - sc.scrollLeft) * EASE;
-  const doneY = Math.abs(targetTop - sc.scrollTop) <= SNAP;
-  const doneX = Math.abs(targetLeft - sc.scrollLeft) <= SNAP;
-
-  sc.scrollTop = doneY ? targetTop : ny;
-  sc.scrollLeft = doneX ? targetLeft : nx;
-
-  if (doneY && doneX) {
-    animSc = null; // glide complete
-    return;
-  }
-  animRaf = requestAnimationFrame(tick);
+  const movingY = stepAxis(animY, 'scrollTop');
+  const movingX = stepAxis(animX, 'scrollLeft');
+  if (movingY || movingX) animRaf = requestAnimationFrame(tick);
 }
 
 function center(r: DOMRect) {
@@ -218,6 +236,16 @@ export function nextInDirection(dir: Direction): HTMLElement | null {
 
   const from = active.getBoundingClientRect();
   const fc = center(from);
+  // Wide controls (e.g. the full-width search bar) have a center far from their
+  // edges, so center-based scoring misfires: Down/Up would land on whatever
+  // sits under the center (the middle person), and Right would prefer a
+  // diagonal grid cell over the adjacent clear button because the button's
+  // horizontal distance from the center is large. Reference an EDGE instead of
+  // the center: the leading edge for the move direction (right edge for Right),
+  // the left edge for vertical moves so Down/Up reach the first item in a row.
+  const wide = active.hasAttribute('data-wide');
+  let refX = fc.x;
+  if (wide) refX = dir === 'right' ? from.right : from.left;
   let best: HTMLElement | null = null;
   let bestScore = Infinity;
 
@@ -228,7 +256,18 @@ export function nextInDirection(dir: Direction): HTMLElement | null {
     if (!visible(el)) continue;
     const r = el.getBoundingClientRect();
     const c = center(r);
-    const dx = c.x - fc.x;
+    // A wide CANDIDATE (e.g. the search input when moving left/up back to it)
+    // has its center far from its near edge, so center-to-center distance would
+    // make a smaller nearby item win instead. Measure to the candidate's edge
+    // facing the move direction: Left lands on the input's right edge, Up on its
+    // bottom edge — the part actually adjacent to where focus is coming from.
+    const elWide = el.hasAttribute('data-wide');
+    let cx = c.x;
+    if (elWide) {
+      if (dir === 'left') cx = r.right;
+      else if (dir === 'right') cx = r.left;
+    }
+    const dx = cx - refX;
     const dy = c.y - fc.y;
 
     // must lie predominantly in the requested direction
