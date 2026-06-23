@@ -39,6 +39,38 @@ npm run dev        # Vite dev server at http://localhost:5173
 
 In the browser, the remote is emulated: arrow keys = D-pad, Enter = select, **Esc** = Back.
 
+### ⚠️ CORS in the dev browser
+
+Sign-in may fail with **"Could not reach server… (Failed to fetch)"** even when the server is reachable. This is a browser-only quirk: depending on its config, an Immich server may not return an `Access-Control-Allow-Origin` header, so the browser blocks the cross-origin request from `http://localhost:5173`. The packaged TV app is unaffected — webOS loads from a `file://` origin and doesn't enforce CORS the same way.
+
+To test sign-in locally, launch Chrome with web security disabled in a throwaway profile:
+
+```bash
+# macOS
+open -na "Google Chrome" --args \
+  --user-data-dir=/tmp/chrome-immich-dev \
+  --disable-web-security \
+  http://localhost:5173
+```
+
+```powershell
+# Windows (PowerShell)
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" `
+  --user-data-dir="$env:TEMP\chrome-immich-dev" `
+  --disable-web-security `
+  http://localhost:5173
+```
+
+```bash
+# Linux
+google-chrome \
+  --user-data-dir=/tmp/chrome-immich-dev \
+  --disable-web-security \
+  http://localhost:5173
+```
+
+Use this window only for local dev — it has web security turned off.
+
 ## 🚀 Build & deploy to a TV
 
 The deploy scripts target a webOS device registered with `ares-setup-device` under the name `lg_c2`. Rename in `package.json` to match your device.
