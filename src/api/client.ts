@@ -179,6 +179,7 @@ interface AssetResponseDto {
   id: string;
   type: string; // "IMAGE" | "VIDEO"
   duration: string | null;
+  fileCreatedAt?: string;
   width?: number;
   height?: number;
   exifInfo?: { exifImageWidth?: number; exifImageHeight?: number };
@@ -199,6 +200,7 @@ export async function smartSearch(query: string): Promise<import('./assets').Ass
       isVideo: !isImage,
       duration: a.duration,
       ratio: h > 0 ? w / h : 1,
+      createdAt: a.fileCreatedAt || '',
     };
   });
 }

@@ -163,36 +163,87 @@ body,
   overflow: hidden;
 }
 
-/* Sidebar: collapsed icon rail, expands to labeled menu on left-edge nav. */
-.sidebar {
+/* Static collapsed icon rail — always visible, never animates. The sliding
+   drawer (.sidebar) covers it when open. */
+.rail {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
+  width: 76px;
   z-index: 5;
   background: var(--surface);
   border-right: 1px solid var(--surface-2);
   display: flex;
   flex-direction: column;
   padding: 18px 0;
-  transition: width 0.18s ease;
   overflow: hidden;
 }
-.sidebar.collapsed {
-  width: 76px;
-}
-/* collapsed: center icons, hide labels, keep highlight inside the rail */
-.sidebar.collapsed .sidebar-brand,
-.sidebar.collapsed .sidebar-item {
+.rail-brand {
+  display: flex;
+  align-items: center;
   justify-content: center;
-  padding-left: 0;
-  padding-right: 0;
-  margin-right: 0;
-  border-radius: 0;
-  gap: 0;
+  padding: 0 0 18px;
+  color: var(--fg);
+}
+.rail-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.rail-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+.rail-item:active {
+  transform: scale(0.92);
+}
+.rail-item.active {
+  background: rgba(66, 80, 175, 0.3);
+}
+.rail-item.active svg {
+  color: var(--immich-dark-primary);
+}
+.rail-item.user {
+  color: var(--muted);
+}
+
+/* Sliding labeled drawer: starts off-screen left, slides over the rail on
+   reveal. Animates transform (GPU-composited) instead of width, so the
+   transition stays smooth on webOS. */
+.sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 300px;
+  z-index: 6;
+  background: var(--surface);
+  border-right: 1px solid var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 0;
+  overflow: hidden;
+  transform: translateX(-100%);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 .sidebar.open {
-  width: 300px;
+  transform: translateX(0);
   box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
 }
 .sidebar-brand {
@@ -248,14 +299,6 @@ body,
 .sidebar-item.user {
   color: var(--muted);
 }
-/* labels hidden when collapsed */
-.sidebar.collapsed .sidebar-label {
-  opacity: 0;
-  width: 0;
-}
-.sidebar-label {
-  transition: opacity 0.12s ease;
-}
 
 .scrim {
   position: absolute;
@@ -280,6 +323,11 @@ body,
   overflow-y: auto;
   padding: 20px 16px 80px;
 }
+.bucket {
+  /* keep each date section's layout self-contained so loading one bucket
+     doesn't force a relayout of sections above/below it. */
+  contain: layout;
+}
 .bucket-title {
   font-size: 24px;
   font-weight: 600;
@@ -299,12 +347,22 @@ body,
   overflow: hidden;
   background: var(--surface-2);
   flex: 0 0 auto;
+  /* isolate each cell's layout+paint so a thumbnail loading or the focus ring
+     redrawing never reflows/repaints the rest of the row (cheaper scroll). */
+  contain: layout paint;
 }
 .thumb-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+/* Pointer (magic-remote / mouse) hover: a lighter border as the cursor passes
+   over a thumbnail. :not(:focus) so hovering never overrides the full focus
+   ring on the actually-focused (last-opened) thumbnail — focus stays put. */
+.thumb:hover:not(:focus) {
+  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
+  z-index: 2;
 }
 .thumb-ph {
   width: 100%;
@@ -428,6 +486,7 @@ body,
 .fs {
   position: fixed;
   inset: 0;
+  z-index: 50; /* above sidebar (5) / scrim (4) — viewer is a full overlay now */
   background: #000;
   display: flex;
   align-items: center;
@@ -445,6 +504,29 @@ body,
 .fs-video {
   width: 100%;
   height: 100%;
+}
+
+/* Centered indeterminate spinner while media loads. Byte-level progress isn't
+   available (blob fetch + <video> buffering expose no reliable %), so this is a
+   spinner rather than a determinate bar. */
+.fs-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--immich-dark-primary);
+  border-radius: 50%;
+  animation: fs-spin 0.8s linear infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+@keyframes fs-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Overlay: hidden by default, shown when .fs has .show-ui (paused / activity) */
@@ -547,14 +629,38 @@ body,
 }
 .fs-seek {
   flex: 1;
-  height: 6px;
+  /* 6px visible track + 14px transparent padding each side = 34px hit area.
+     box-sizing is border-box globally, so height must include the padding or
+     the content-box (the painted track) collapses to zero. */
+  height: 34px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.25);
-  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  padding: 14px 0;
+  background-clip: content-box;
+  touch-action: none; /* let pointer drag scrub instead of scrolling/panning */
 }
 .fs-seek-fill {
-  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
   background: var(--immich-dark-primary);
+  border-radius: 3px;
+  pointer-events: none; /* clicks land on the track, not the fill */
+}
+/* draggable knob at the play head */
+.fs-seek-knob {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px -8px 0 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
 .fs-counter {

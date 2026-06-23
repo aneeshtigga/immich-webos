@@ -8,7 +8,9 @@ import { Icon } from '../components/Icon';
 interface Props {
   assets: Asset[];
   index: number;
-  onClose: () => void;
+  // reports the index being viewed at close time so the grid can restore focus
+  // to that exact photo (the user may have paged left/right while in here).
+  onClose: (index: number) => void;
 }
 
 type Quality = 'transcoded' | 'original';
@@ -36,11 +38,14 @@ export function Fullscreen({ assets, index, onClose }: Props) {
   const [quality, setQuality] = useState<Quality>('transcoded');
   const [overlay, setOverlay] = useState(true);
   const [videoErr, setVideoErr] = useState(false);
+  const [buffering, setBuffering] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const imgUrlRef = useRef<string | null>(null);
   const hideTimer = useRef<number | undefined>(undefined);
   const resumeAt = useRef(0); // remember position across quality switch
+  const seekRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
 
   const asset = assets[i];
   const isVideo = !!asset?.isVideo;
@@ -98,7 +103,13 @@ export function Fullscreen({ assets, index, onClose }: Props) {
     setProgress({ cur: 0, dur: 0 });
     resumeAt.current = 0;
     setPaused(!isVideo); // videos start in playing intent (autoplay)
+    setBuffering(isVideo); // a fresh video is loading until it can play
   }, [asset?.id, isVideo]);
+
+  // switching quality reloads a different source — show the spinner again
+  useEffect(() => {
+    if (isVideo) setBuffering(true);
+  }, [quality, isVideo]);
 
   const go = useCallback(
     (delta: number) => {
@@ -122,6 +133,46 @@ export function Fullscreen({ assets, index, onClose }: Props) {
     setProgress({ cur: v.currentTime, dur: v.duration || 0 });
   }, []);
 
+  // Pointer scrubbing on the seek bar — works for PC mouse and the LG
+  // magic-remote pointer (both emit pointer events). Maps the x position within
+  // the bar to a fraction of duration. Used for a single click (jump) and for
+  // drag (scrub): pointermove updates while a drag is active.
+  const seekToClientX = useCallback((clientX: number) => {
+    const v = videoRef.current;
+    const bar = seekRef.current;
+    if (!v || !bar || !v.duration) return;
+    const rect = bar.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    v.currentTime = frac * v.duration;
+    setProgress({ cur: v.currentTime, dur: v.duration });
+  }, []);
+
+  const onSeekDown = useCallback(
+    (e: PointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      draggingRef.current = true;
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      seekToClientX(e.clientX);
+      poke(true);
+    },
+    [seekToClientX, poke],
+  );
+
+  const onSeekMove = useCallback(
+    (e: PointerEvent) => {
+      if (!draggingRef.current) return;
+      seekToClientX(e.clientX);
+      poke(true);
+    },
+    [seekToClientX, poke],
+  );
+
+  const onSeekUp = useCallback((e: PointerEvent) => {
+    draggingRef.current = false;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  }, []);
+
   const cycleQuality = useCallback(() => {
     const v = videoRef.current;
     resumeAt.current = v?.currentTime || 0;
@@ -137,7 +188,7 @@ export function Fullscreen({ assets, index, onClose }: Props) {
 
       if (isBack(code)) {
         e.preventDefault();
-        onClose();
+        onClose(i);
         return;
       }
 
@@ -206,6 +257,9 @@ export function Fullscreen({ assets, index, onClose }: Props) {
               setPaused(false);
               poke(false);
             }}
+            onPlaying={() => setBuffering(false)}
+            onCanPlay={() => setBuffering(false)}
+            onWaiting={() => setBuffering(true)}
             onPause={() => {
               setPaused(true);
               setOverlay(true);
@@ -222,21 +276,27 @@ export function Fullscreen({ assets, index, onClose }: Props) {
             onError={() => {
               // fall back transcoded -> original once
               if (quality === 'transcoded') cycleQuality();
-              else setVideoErr(true);
+              else {
+                setVideoErr(true);
+                setBuffering(false);
+              }
             }}
           />
         )
       ) : imgSrc ? (
         <img class="fs-img" src={imgSrc} />
-      ) : (
-        <div class="msg">Loading…</div>
+      ) : null}
+
+      {/* centered loading spinner: photo not yet decoded, or video buffering */}
+      {((!isVideo && !imgSrc) || (isVideo && buffering && !videoErr)) && (
+        <div class="fs-spinner" />
       )}
 
       {/* overlay UI */}
       <div class="fs-ui">
         {/* top bar */}
         <div class="fs-top">
-          <button class="fs-btn" onClick={onClose} title="Back to grid">
+          <button class="fs-btn" onClick={() => onClose(i)} title="Back to grid">
             <Icon name="back" size={28} />
             <span>Back</span>
           </button>
@@ -269,8 +329,17 @@ export function Fullscreen({ assets, index, onClose }: Props) {
               <Icon name={paused ? 'play' : 'pause'} size={30} />
             </button>
             <span class="fs-time">{fmt(progress.cur)}</span>
-            <div class="fs-seek">
-              <div class="fs-seek-fill" style={{ width: `${pct}%` }} />
+            <div
+              ref={seekRef}
+              class="fs-seek"
+              onPointerDown={onSeekDown}
+              onPointerMove={onSeekMove}
+              onPointerUp={onSeekUp}
+              onPointerCancel={onSeekUp}
+            >
+              <div class="fs-seek-fill" style={{ width: `${pct}%` }}>
+                <span class="fs-seek-knob" />
+              </div>
             </div>
             <span class="fs-time">{fmt(progress.dur)}</span>
           </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'preact/hooks';
 import { loadThumb } from '../api/media';
+import { thumbObserver } from './lazyObserver';
 import { Icon } from './Icon';
 
 interface Props {
@@ -22,17 +23,11 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setNear(true);
-          io.disconnect();
-        }
-      },
-      { rootMargin: '400px' },
-    );
-    io.observe(el);
-    return () => io.disconnect();
+    thumbObserver.observe(el, () => {
+      setNear(true);
+      thumbObserver.unobserve(el);
+    });
+    return () => thumbObserver.unobserve(el);
   }, []);
 
   useEffect(() => {
@@ -51,6 +46,7 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
       ref={ref}
       data-focusable
       data-seq
+      data-asset-id={assetId}
       class="thumb focusable"
       style={{ width: `${width}px`, height: `${height}px` }}
       onClick={onSelect}

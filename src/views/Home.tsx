@@ -17,7 +17,7 @@ import { Albums } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
 import { useRemote } from '../nav/useRemote';
-import { setRoot, focusables } from '../nav/focus';
+import { setRoot, focusables, focus } from '../nav/focus';
 import { exitApp } from '../nav/exit';
 
 interface Viewer {
@@ -48,15 +48,37 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     }, 0);
   };
 
+  // Re-scope nav root + focus the content area when the VIEW changes (tab or
+  // album). Deliberately NOT keyed on `viewer`: the viewer is an overlay that
+  // leaves the grid mounted, so toggling it must not reset grid focus/scroll —
+  // closing restores focus to the viewed thumbnail explicitly (closeViewer).
   useEffect(() => {
     setRoot(rootRef.current);
-    // keep focus in the content area; sidebar only gets focus when revealed
-    if (!viewer) setTimeout(() => focusFirstContent(), 0);
-  }, [route, album, viewer]);
+    setTimeout(() => focusFirstContent(), 0);
+  }, [route, album]);
 
   const openViewer = useCallback((assets: Asset[], index: number) => {
     setViewer({ assets, index });
   }, []);
+
+  // Close the viewer and return focus to the thumbnail of the photo last shown
+  // (the user may have paged left/right inside the viewer). The grid was never
+  // unmounted, so its scroll position and loaded buckets are intact and the
+  // target thumb is already in the DOM; focus() also scrolls it into view.
+  const closeViewer = useCallback(
+    (index: number) => {
+      const id = viewer?.assets[index]?.id;
+      setViewer(null);
+      setTimeout(() => {
+        const el = id
+          ? rootRef.current?.querySelector<HTMLElement>(`[data-asset-id="${id}"]`)
+          : null;
+        if (el) focus(el);
+        else focusFirstContent();
+      }, 0);
+    },
+    [viewer],
+  );
 
   // Focus the first content (non-sidebar) focusable. The grid loads its first
   // bucket asynchronously, so retry for a short window until a thumbnail exists
@@ -87,7 +109,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   //  grid (closed) -> open sidebar, focus the active tab
   const onBack = useCallback(() => {
     if (viewer) {
-      setViewer(null);
+      closeViewer(viewer.index);
     } else if (album) {
       setAlbum(null);
     } else if (sidebarOpen) {
@@ -95,7 +117,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     } else {
       openSidebarFocusActive();
     }
-  }, [viewer, album, sidebarOpen]);
+  }, [viewer, album, sidebarOpen, closeViewer]);
 
   // disable the grid/sidebar remote handler while a fullscreen overlay
   // (viewer or exit dialog) owns the keys
@@ -117,18 +139,18 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     onLogout();
   };
 
-  if (viewer) {
-    return (
-      <Fullscreen
-        assets={viewer.assets}
-        index={viewer.index}
-        onClose={() => setViewer(null)}
-      />
-    );
-  }
-
   return (
     <div class="home" ref={rootRef}>
+      {/* Viewer is an overlay (position:fixed), NOT a replacement for the grid.
+          Keeping the grid mounted underneath preserves its scroll position and
+          loaded buckets, so closing returns to the exact spot. */}
+      {viewer && (
+        <Fullscreen
+          assets={viewer.assets}
+          index={viewer.index}
+          onClose={closeViewer}
+        />
+      )}
       <Sidebar
         open={sidebarOpen}
         active={route}
