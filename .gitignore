@@ -12,3 +12,4 @@ immich-webos.png
 immich.png
 *.png
 !public/*.png
+!screenshots/*.png

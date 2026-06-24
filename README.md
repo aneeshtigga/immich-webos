@@ -15,6 +15,46 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 - 🎬 Full-screen photo/video viewer with remote playback controls
 - 🕹️ D-pad spatial navigation tuned for the 10-foot experience
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="screenshots/grid.png" alt="Justified, day-grouped photo timeline" width="100%">
+  <br>
+  <em>Justified, day-grouped timeline grid</em>
+</p>
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="screenshots/sidebar.png" alt="Auto-hiding sidebar" width="100%"><br>
+      <em>Auto-hiding sidebar that grows in place</em>
+    </td>
+    <td width="50%" align="center">
+      <img src="screenshots/albums.png" alt="Album browser" width="100%"><br>
+      <em>Album browser</em>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="screenshots/search.png" alt="Search with People and Places" width="100%"><br>
+      <em>Search — browse People &amp; Places</em>
+    </td>
+    <td width="50%" align="center">
+      <img src="screenshots/bike.png" alt="Text search results" width="100%"><br>
+      <em>Text search results</em>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <img src="screenshots/login.png" alt="Login with phone QR sign-in" width="100%"><br>
+      <em>Login with phone QR sign-in</em>
+    </td>
+    <td width="50%" align="center"></td>
+  </tr>
+</table>
+
+> Screenshots use the public Immich [demo server](https://demo.immich.app).
+
 ## 📋 Requirements
 
 - An [Immich](https://immich.app/) server you can reach from the TV
