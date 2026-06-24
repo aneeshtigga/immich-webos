@@ -17,21 +17,15 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 
 ## 📸 Screenshots
 
-<p align="center">
-  <img src="screenshots/grid.png" alt="Justified, day-grouped photo timeline" width="100%">
-  <br>
-  <em>Justified, day-grouped timeline grid</em>
-</p>
-
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="screenshots/sidebar.png" alt="Auto-hiding sidebar" width="100%"><br>
-      <em>Auto-hiding sidebar that grows in place</em>
+      <img src="screenshots/login.png" alt="Login with phone QR sign-in" width="100%"><br>
+      <em>Login with phone QR sign-in</em>
     </td>
     <td width="50%" align="center">
-      <img src="screenshots/albums.png" alt="Album browser" width="100%"><br>
-      <em>Album browser</em>
+      <img src="screenshots/grid.png" alt="Justified, day-grouped photo timeline" width="100%"><br>
+      <em>Justified, day-grouped timeline grid</em>
     </td>
   </tr>
   <tr>
@@ -46,10 +40,13 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="screenshots/login.png" alt="Login with phone QR sign-in" width="100%"><br>
-      <em>Login with phone QR sign-in</em>
+      <img src="screenshots/albums.png" alt="Album browser" width="100%"><br>
+      <em>Album browser</em>
     </td>
-    <td width="50%" align="center"></td>
+    <td width="50%" align="center">
+      <img src="screenshots/sidebar.png" alt="Auto-hiding sidebar" width="100%"><br>
+      <em>Auto-hiding sidebar that grows in place</em>
+    </td>
   </tr>
 </table>
 
