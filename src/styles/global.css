@@ -343,28 +343,63 @@ select {
   overflow: hidden;
 }
 
-/* Static collapsed icon rail — always visible, never animates. The sliding
-   drawer (.sidebar) covers it when open. */
+/* Single floating rail card. Collapsed = 76px icon strip; open = 300px with
+   labels. The SAME element grows (it's not a separate drawer). It floats inset
+   14px from the screen edges with a 20px radius on every corner.
+
+   Smoothness on webOS: we DO animate `width` here, but the inner content is
+   laid out at a fixed width (.rail-inner) and clipped by overflow:hidden, so
+   growing the card reveals more of already-laid-out content instead of
+   reflowing text every frame. `contain: layout paint` bounds that work to the
+   card's own small box, so the photo grid behind it is never relayouted or
+   repainted during the animation. */
 .rail {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  bottom: 14px;
+  width: 76px;
+  z-index: 6;
+  background: var(--surface);
+  border-radius: 20px;
+  overflow: hidden;
+  contain: layout paint;
+  transition: width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rail.open {
+  width: 300px;
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
+}
+/* Warm-up frame (see Sidebar.tsx): paint the open-width card + shadow into the
+   GPU cache invisibly, no transition, so the first real open has no cold hitch. */
+.rail.priming {
+  opacity: 0;
+  pointer-events: none;
+  transition: none;
+}
+
+/* Fixed-width inner shell: pinned to the OPEN width so labels are always laid
+   out; the collapsed card just clips everything past 76px. This is what keeps
+   the width animation from reflowing per frame. */
+.rail-inner {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
-  width: 76px;
-  z-index: 5;
-  background: var(--surface);
-  border-right: 1px solid var(--surface-2);
+  width: 300px;
   display: flex;
   flex-direction: column;
   padding: 18px 0;
-  overflow: hidden;
 }
 .rail-brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0 0 18px;
+  gap: 16px;
+  height: 52px;
+  padding: 0 0 18px 24px;
   color: var(--fg);
+  font-size: 26px;
+  font-weight: 700;
 }
 .rail-nav {
   display: flex;
@@ -379,21 +414,64 @@ select {
   gap: 4px;
 }
 .rail-item {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 18px;
   height: 52px;
+  /* 24px left padding centers the 26px icon in the 76px collapsed strip
+     ((76-26)/2 ≈ 25); labels sit to its right and are clipped when collapsed. */
+  padding: 0 24px;
   border: none;
   background: transparent;
   color: var(--fg);
+  font-size: 21px;
+  text-align: left;
+  white-space: nowrap;
   cursor: pointer;
-  transition: transform 0.08s ease, background 0.12s ease;
+  transition: transform 0.08s ease;
 }
 .rail-item:active {
-  transform: scale(0.92);
+  transform: scale(0.95);
+}
+/* icon + label ride above the indicator */
+.rail-item > * {
+  position: relative;
+  z-index: 1;
+}
+/* Squircle indicator: a contained rounded box behind the icon, NOT a full-bleed
+   bar — so collapsed it reads as a 52x52 squircle around the icon (uniform
+   corners, never clipped flat at the strip edge). Open, it grows to a
+   uniform-radius bar spanning the row. Carries BOTH the selected fill and the
+   focus ring, so the two always share the same squircle shape. */
+.rail-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 12px;
+  width: 52px; /* centered on the icon: 12 + 26 = 38 ≈ strip center */
+  border-radius: 16px;
+  background: transparent;
+  transition: background 0.12s ease, box-shadow 0.08s ease, width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rail.open .rail-item::before {
+  width: auto;
+  right: 14px;
+}
+.rail-item.active::before {
+  background: rgba(66, 80, 175, 0.3); /* immich primary @ 30% (no color-mix: webOS Cr68) */
+}
+/* Focus ring hugs the squircle, not the full button. Override the global square
+   ring (.focusable:focus) which would otherwise box the whole 300px row. */
+.rail-item.focusable:focus {
+  box-shadow: none;
+}
+.rail-item.focusable:focus::before {
+  box-shadow: 0 0 0 3px var(--focus);
 }
 .rail-item.active {
-  background: rgba(66, 80, 175, 0.3);
+  color: #fff;
 }
 .rail-item.active svg {
   color: var(--immich-dark-primary);
@@ -401,91 +479,15 @@ select {
 .rail-item.user {
   color: var(--muted);
 }
-
-/* Sliding labeled drawer: starts off-screen left, slides over the rail on
-   reveal. Animates transform (GPU-composited) instead of width, so the
-   transition stays smooth on webOS. */
-.sidebar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 300px;
-  z-index: 6;
-  background: var(--surface);
-  border-right: 1px solid var(--surface-2);
-  display: flex;
-  flex-direction: column;
-  padding: 18px 0;
-  overflow: hidden;
-  transform: translateX(-100%);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
-}
-.sidebar.open {
-  transform: translateX(0);
-  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
-}
-/* Warm-up frame (see Sidebar.tsx): render the open drawer + its shadow into the
-   GPU cache invisibly, with no transition, so the user's first real open is
-   warm and slides without the cold-raster hitch. */
-.sidebar.priming {
+/* Labels: present in the DOM always (so no reflow on open), but faded out while
+   collapsed and faded in on open. Opacity is GPU-cheap and the text is clipped
+   by the card anyway. */
+.rail-label {
   opacity: 0;
-  pointer-events: none;
-  transition: none;
+  transition: opacity 0.15s ease;
 }
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 24px 18px;
-  color: var(--fg);
-  font-size: 26px;
-  font-weight: 700;
-}
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-}
-.sidebar-foot {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.sidebar-item {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 14px 26px;
-  border: none;
-  background: transparent;
-  color: var(--fg);
-  font-size: 21px;
-  text-align: left;
-  white-space: nowrap;
-  border-radius: 0 24px 24px 0;
-  margin-right: 12px;
-}
-/* pointer press feedback (magic-remote click / mouse) */
-.sidebar-item {
-  transition: transform 0.08s ease, background 0.12s ease;
-}
-.sidebar-item:active {
-  transform: scale(0.95);
-  background: rgba(66, 80, 175, 0.45);
-}
-.sidebar-item.active {
-  background: rgba(66, 80, 175, 0.3); /* immich primary @ 30% (no color-mix: webOS Cr68) */
-  color: #fff;
-}
-.sidebar-item.active svg {
-  color: var(--immich-dark-primary);
-}
-.sidebar-item.user {
-  color: var(--muted);
+.rail.open .rail-label {
+  opacity: 1;
 }
 
 /* Transparent full-shell click-catcher shown while the sidebar is open: a
@@ -511,7 +513,7 @@ select {
   top: 0;
   right: 0;
   bottom: 0;
-  left: 76px;
+  left: 94px; /* sit just right of the floating rail card: 14 margin + 76 width + 4 gap */
   overflow: hidden;
 }
 
