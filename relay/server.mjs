@@ -37,11 +37,24 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { networkInterfaces } from 'node:os';
 
 const PORT = Number(process.env.PORT || 8788);
 const CODE_TTL = Number(process.env.CODE_TTL_SECONDS || 300);
 const INTERVAL = Number(process.env.POLL_INTERVAL || 5);
-const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
+
+// The verification_uri embedded in the QR must be reachable from the PHONE, so
+// it can't be localhost. Honor an explicit PUBLIC_URL; otherwise advertise this
+// host's LAN IPv4 so a phone on the same network can open the verify page.
+function lanIP() {
+  for (const addrs of Object.values(networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (a.family === 'IPv4' && !a.internal) return a.address;
+    }
+  }
+  return 'localhost';
+}
+const PUBLIC_URL = (process.env.PUBLIC_URL || `http://${lanIP()}:${PORT}`).replace(/\/+$/, '');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const VERIFY_HTML = readFileSync(join(here, 'verify.html'), 'utf8');

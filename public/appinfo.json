@@ -12,6 +12,5 @@
   "splashBackground": "splash.png",
   "disableBackHistoryAPI": true,
   "supportTouchMode": "none",
-  "handlesRelaunch": true,
   "requiredPermissions": ["time.query", "internet"]
 }

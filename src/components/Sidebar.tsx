@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'preact/hooks';
 import { Icon } from './Icon';
 import { IconName } from './icons';
 import { ImmichLogo } from './ImmichLogo';
@@ -37,6 +38,40 @@ interface Props {
 // (data-focusable); the rail icons are pointer-clickable (magic remote) but out
 // of the d-pad focus order.
 export function Sidebar({ open, active, userName, onNavigate, onLogout }: Props) {
+  // Warm-up: the first real open is otherwise cold — the TV GPU has to
+  // rasterize the drawer's layer AND its big `box-shadow` blur on that first
+  // frame, so the opening slide hitches once. At mount we briefly flip the
+  // drawer into its `.open` state (translateX(0) + the shadow), invisible
+  // (.priming pins opacity:0 + pointer-events:none). Chromium rasterizes
+  // opacity:0 layers, so the texture + shadow land in the GPU cache; the user's
+  // first real open then hits a warm layer and slides at full speed. opacity:0
+  // (not display:none/visibility:hidden) is required — those skip rasterization.
+  //
+  // Teardown runs a 3-step state machine across frames so dropping the prime
+  // never shows a slide-out: `.priming` also sets `transition:none`, and we
+  // keep it on through the frame where the drawer's transform jumps back
+  // offscreen (translateX(-100%)) — so that jump is instant — then drop it only
+  // once the transform has already settled, re-enabling the transition with no
+  // pending value change to animate.
+  //   prime  -> classes: open + priming   (onscreen, shadow, invisible, no-anim)
+  //   settle -> classes: priming          (transform jumps offscreen, no-anim)
+  //   done   -> classes: (none)            (transition restored, nothing to anim)
+  const [warm, setWarm] = useState<'prime' | 'settle' | 'done'>('prime');
+  useEffect(() => {
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => {
+      setWarm('settle');
+      r2 = requestAnimationFrame(() => setWarm('done'));
+    });
+    return () => {
+      cancelAnimationFrame(r1);
+      cancelAnimationFrame(r2);
+    };
+  }, []);
+
+  const priming = warm !== 'done';
+  const drawerOpen = open || warm === 'prime';
+
   return (
     <>
       {/* static collapsed rail (icons only) */}
@@ -67,7 +102,11 @@ export function Sidebar({ open, active, userName, onNavigate, onLogout }: Props)
       </aside>
 
       {/* sliding labeled drawer (focusable) */}
-      <aside class={'sidebar ' + (open ? 'open' : '')}>
+      <aside
+        class={
+          'sidebar ' + (drawerOpen ? 'open ' : '') + (priming ? 'priming' : '')
+        }
+      >
         <div class="sidebar-brand">
           <ImmichLogo size={30} />
           <span class="sidebar-label">Immich</span>

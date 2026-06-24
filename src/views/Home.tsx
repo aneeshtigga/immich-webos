@@ -36,15 +36,39 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The content focusable (thumbnail) that had focus when the sidebar was
+  // opened, so collapsing the sidebar restores it instead of jumping to the top
+  // of the grid. The grid never unmounts on a sidebar toggle, so its scroll
+  // position is already intact — only focus needs returning.
+  const lastContentFocus = useRef<HTMLElement | null>(null);
   const user = getUser();
 
   // open the sidebar and focus its currently-active tab
   const openSidebarFocusActive = () => {
+    // remember where focus was in the content so we can return to it on collapse
+    const ae = document.activeElement as HTMLElement | null;
+    if (ae?.hasAttribute('data-focusable') && !ae.hasAttribute('data-sidebar')) {
+      lastContentFocus.current = ae;
+    }
     setSidebarOpen(true);
     setTimeout(() => {
       const items = focusables().filter((e) => e.hasAttribute('data-sidebar'));
       const active = items.find((e) => e.classList.contains('active'));
       (active || items[0])?.focus();
+    }, 0);
+  };
+
+  // collapse the sidebar and return focus to the thumbnail that was focused
+  // before it opened (falling back to the first content item if that element is
+  // gone, e.g. its bucket was evicted). focus() re-rings + eases the cell into
+  // view; since the grid never scrolled while the sidebar was open, it's already
+  // in place, so nothing actually moves.
+  const collapseSidebar = () => {
+    setSidebarOpen(false);
+    setTimeout(() => {
+      const el = lastContentFocus.current;
+      if (el && el.isConnected && el.offsetParent !== null) focus(el);
+      else focusFirstContent();
     }, 0);
   };
 
@@ -96,8 +120,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     if (dir === 'left' && !sidebarOpen) {
       openSidebarFocusActive();
     } else if (dir === 'right' && sidebarOpen) {
-      setSidebarOpen(false);
-      setTimeout(() => focusFirstContent(), 0);
+      collapseSidebar();
     }
   }, [sidebarOpen]);
 
@@ -158,7 +181,13 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         onNavigate={navigate}
         onLogout={doLogout}
       />
-      {sidebarOpen && <div class="scrim" />}
+      {/* Invisible click-catcher over the content while the sidebar is open: a
+          pointer click anywhere outside the sidebar (magic remote / mouse)
+          collapses it. Transparent — no dark scrim — and it sits below the
+          sidebar (z-index) so sidebar clicks still land on their buttons. */}
+      {sidebarOpen && (
+        <div class="sidebar-catch" onClick={collapseSidebar} />
+      )}
 
       <main class={'content ' + (sidebarOpen ? 'shifted' : '')}>
         {/* keyed wrapper: changing view replaces it, replaying the fade-in so

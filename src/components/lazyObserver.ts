@@ -39,7 +39,17 @@ function makeObserver(rootMargin: string) {
   };
 }
 
-// 400px: start fetching a thumbnail before it scrolls into view.
-export const thumbObserver = makeObserver('400px');
-// 700px: load a bucket's assets while its header is still below the fold.
-export const bucketObserver = makeObserver('700px');
+// Prefetch window, sized in viewport heights ("pages") so it tracks the screen.
+// We keep roughly two pages above AND below the viewport loaded so scrolling
+// back and forth never waits on a refetch (the thumbnails stay mounted and in
+// the media LRU cache). rootMargin expands the root box in every direction, so
+// `2 pages` means thumbnails within ~2 pages of the viewport in either
+// direction start loading.
+const PAGE = (typeof window !== 'undefined' && window.innerHeight) || 720;
+
+// ~2 pages: fetch a thumbnail well before it scrolls into view.
+export const thumbObserver = makeObserver(`${PAGE * 2}px`);
+// A bit further out than the thumbnails, so a bucket's assets have loaded by
+// the time its thumbnails enter the prefetch window (thumbs can't exist until
+// their bucket's asset list arrives).
+export const bucketObserver = makeObserver(`${PAGE * 2 + 300}px`);

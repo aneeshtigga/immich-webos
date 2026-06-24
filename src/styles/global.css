@@ -426,6 +426,14 @@ select {
   transform: translateX(0);
   box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
 }
+/* Warm-up frame (see Sidebar.tsx): render the open drawer + its shadow into the
+   GPU cache invisibly, with no transition, so the user's first real open is
+   warm and slides without the cold-raster hitch. */
+.sidebar.priming {
+  opacity: 0;
+  pointer-events: none;
+  transition: none;
+}
 .sidebar-brand {
   display: flex;
   align-items: center;
@@ -480,14 +488,24 @@ select {
   color: var(--muted);
 }
 
-.scrim {
+/* Transparent full-shell click-catcher shown while the sidebar is open: a
+   pointer click outside the drawer collapses it. No background (no scrim).
+   z-index sits below the drawer (6) and rail (5) so clicks on those still land
+   on their own buttons; above the content (default) so a click on the grid is
+   caught here instead of opening a thumbnail. */
+.sidebar-catch {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
   z-index: 4;
+  background: transparent;
 }
 
-/* Content shifts right of the collapsed rail; sidebar overlays when open. */
+/* Content shifts right of the collapsed rail; sidebar overlays when open.
+   Deliberately NOT promoted to its own GPU layer (no translateZ/will-change):
+   flattening the whole scrolling grid into one big backing texture made every
+   focus-ring repaint cover that texture instead of a single isolated .thumb
+   tile, which the TV GPU rasterizes slowly → focus felt laggy. Each .thumb
+   already has `contain: layout paint`, keeping focus repaints cell-local. */
 .content {
   position: absolute;
   top: 0;
@@ -499,11 +517,15 @@ select {
 
 /* View transition: each view is wrapped in a keyed .view-enter, so switching
    tabs replaces the node and replays this fade-up instead of swapping content
-   abruptly. GPU-composited (opacity + transform) so it stays smooth on webOS. */
+   abruptly. GPU-composited (opacity + transform) so it stays smooth on webOS.
+   NOTE: no `will-change` here. This wraps the ENTIRE photo grid; a permanent
+   will-change kept the whole (huge) timeline subtree promoted to a live GPU
+   layer forever, blowing the TV's small layer-memory budget and making the
+   sidebar slide thrash on big pages (smooth on the small favorites grid). The
+   one-shot 0.22s animation composites fine without the hint. */
 .view-enter {
   height: 100%;
   animation: view-enter 0.22s ease both;
-  will-change: opacity, transform;
 }
 @keyframes view-enter {
   from {
@@ -566,7 +588,8 @@ select {
 .thumb-ph {
   width: 100%;
   height: 100%;
-  background: linear-gradient(110deg, var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
+  /* flat solid tint set inline per-asset (Thumb.phColor) — cheapest paint on
+     the TV; no gradient/shimmer. */
 }
 .bucket-ph {
   width: 100%;
@@ -843,7 +866,7 @@ select {
 .fs {
   position: fixed;
   inset: 0;
-  z-index: 50; /* above sidebar (5) / scrim (4) — viewer is a full overlay now */
+  z-index: 50; /* above the sidebar (6) — viewer is a full overlay */
   background: #000;
   display: flex;
   align-items: center;
