@@ -2,6 +2,39 @@
    fixed viewport meta. Colors are Immich's own dark-theme tokens lifted from
    web/src/app.css so the look matches the desktop web UI. */
 
+/* Inter, self-hosted (Latin subset, woff2) so the TV renders the exact same
+   font as the desktop — webOS has no Inter and was falling back to LG's system
+   font, which looked different from the Mac. Paths are relative (base './') for
+   the file:// .ipk. font-display:swap so text shows immediately. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/inter-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('../fonts/inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('../fonts/inter-latin-700-normal.woff2') format('woff2');
+}
+
 :root {
   --immich-primary: #4250af;
   --immich-dark-primary: #accbfa; /* accent on dark bg */
@@ -29,6 +62,16 @@ body,
   font-family: 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
   overflow: hidden;
   user-select: none;
+}
+
+/* Form controls don't inherit font-family — browsers give inputs/buttons their
+   own UA default (often a serif/mono-ish system font), which is why the login
+   fields didn't render in Inter. Force inheritance. */
+input,
+button,
+textarea,
+select {
+  font-family: inherit;
 }
 
 /* Focus ring — the key TV affordance. Accent matches Immich's dark primary. */
@@ -94,41 +137,178 @@ body,
 }
 
 /* ---------- Login ---------- */
+/* Two-panel layout (YouTube-style): left = logo + manual form, right = QR.
+   When QR is disabled the left panel simply centers on its own.
+
+   Sizes are in vmin (1vmin = 1% of the smaller viewport side = height on a
+   landscape TV), NOT px. The webOS viewport is a fixed 1280x720 logical canvas
+   that the TV scales to the panel, but desktop Chrome lays out at the real
+   window width — so fixed px look big on a Mac and small on the TV. vmin scales
+   with the screen, keeping the design proportionate on both. Reference: at the
+   720-tall TV canvas, 1vmin = 7.2px. */
 .login {
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11vmin;
+  padding: 4vmin 11vmin;
+  /* if a very wide/short window can't fit the panels' natural height, scroll
+     rather than clip the Sign-in button (the TV is true 16:9 and never does) */
+  overflow-y: auto;
+  position: relative;
+  background: var(--bg) url('../assets/login-bg.webp') center / cover no-repeat;
+}
+/* Scrim: darken the artwork so white text and the QR's caption stay readable
+   over the bright blobs. Darker on the left (form) where text density is high,
+   fading toward the QR side. */
+.login::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(10, 10, 10, 0.92) 0%,
+    rgba(10, 10, 10, 0.72) 38%,
+    rgba(10, 10, 10, 0.4) 70%,
+    rgba(10, 10, 10, 0.25) 100%
+  );
+  pointer-events: none;
+}
+/* lift the panels above the scrim */
+.login-left,
+.login-right {
+  position: relative;
+  z-index: 1;
+}
+/* split layout: panels centered as a block, top-aligned to each other so the
+   logo and QR title share a baseline like the YouTube screen */
+.login--split {
+  justify-content: space-between;
+  align-items: center;
+}
+.login-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 50vmin;
+  flex: 0 0 auto;
+}
+.login--split .login-left {
+  /* nudge the form group off the hard left edge for TV overscan */
+  margin-left: 5vmin;
+}
+.login-logo {
+  width: 28vmin;
+  height: auto;
+  margin: 0 0 3.5vmin;
+}
+.login-heading {
+  font-size: 4.4vmin;
+  font-weight: 700;
+  margin: 0 0 4vmin;
+  color: var(--fg);
+}
+.login-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2.4vmin;
+}
+
+/* Right panel — big QR + scan/code captions, centered */
+.login-right {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  text-align: center;
+  margin-right: 20vmin;
 }
-.login-logo {
-  width: 320px;
-  height: auto;
-  margin: 0 0 40px;
+.login-qr-title {
+  font-size: 3.4vmin;
+  font-weight: 600;
+  margin: 0 0 3vmin;
+  color: var(--fg);
 }
-.login-form {
-  width: 560px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.qr {
+  width: 44vmin;
+  height: 44vmin;
+  border-radius: 2vmin;
+  /* white quiet-zone around the code for reliable scanning */
+  border: 2vmin solid #fff;
+  background: #fff;
+}
+.login-qr-hint {
+  font-size: 2.9vmin;
+  color: var(--fg);
+  margin: 3.5vmin 0 2.4vmin;
+  line-height: 1.5;
+  font-weight: 400; /* "Scan QR code or go to" stays regular weight */
+}
+.login-qr-hint strong {
+  display: inline-block;
+  margin-top: 0.8vmin;
+  font-size: 3.4vmin;
+  font-weight: 700; /* the URL is the emphasized part */
+}
+.login-qr-enter {
+  font-size: 2.6vmin;
+  color: var(--fg);
+  margin: 0 0 0.8vmin;
+}
+.login-qr-code {
+  margin: 0;
+  font-family: 'Inter';
+  font-size: 5vmin;
+  font-weight: 700;
+  letter-spacing: 0.7vmin;
+  color: #fff;
+}
+.login-qr-spinner {
+  position: static;
+  margin: 11vmin auto;
 }
 .field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  font-size: 21px;
-  color: var(--muted);
+  gap: 10px;
+  font-size: 24px;
+  color: var(--fg);
 }
+/* Translucent frosted controls so they sit on the artwork instead of looking
+   like opaque cut-out boxes against it. */
 .input {
-  font-size: 25px;
-  padding: 15px 18px;
+  font-size: 28px;
+  padding: 18px 22px;
   border-radius: 12px;
-  border: 2px solid var(--surface-2);
-  background: var(--surface);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 10, 10, 0.75);
   color: #fff;
 }
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+/* quick scheme-prefix buttons under the Server URL field */
+.scheme-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.scheme-btn {
+  font-family: 'Inter';
+  font-size: 20px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 10, 10, 0.75);
+  color: #fff;
+  cursor: pointer;
+}
 .input:focus {
-  border-color: var(--immich-primary);
+  border-color: var(--immich-dark-primary);
+  background: rgba(10, 10, 10, 0.75);
 }
 /* Chrome autofill forces its own tiny light styling; restore ours. Dev-only —
    webOS TV has no password manager so autofill never triggers there. */
@@ -143,13 +323,13 @@ body,
   transition: background-color 9999s ease-in-out 0s;
 }
 .btn-primary {
-  font-size: 26px;
-  padding: 16px;
+  font-size: 28px;
+  padding: 18px;
   border-radius: 12px;
   border: none;
   background: var(--immich-primary);
   color: #fff;
-  margin-top: 6px;
+  margin-top: 10px;
 }
 .login-error {
   color: #ff6b6b;

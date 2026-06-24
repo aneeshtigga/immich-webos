@@ -1,0 +1,14 @@
+{
+  "id": "com.immich.webos.service",
+  "description": "Immich pairing relay probe",
+  "services": [
+    {
+      "name": "com.immich.webos.service",
+      "description": "Starts a local HTTP server and reports the TV's LAN address",
+      "commands": [
+        { "name": "start", "description": "start the probe HTTP server" },
+        { "name": "ping", "description": "report status" }
+      ]
+    }
+  ]
+}

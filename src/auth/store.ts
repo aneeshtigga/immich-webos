@@ -4,9 +4,25 @@
 const SERVER_KEY = 'immich.server';
 const TOKEN_KEY = 'immich.token';
 const USER_KEY = 'immich.user';
+const ISSUER_KEY = 'immich.pairIssuer';
 
 // Prefilled so you don't type a URL on the TV remote. Change in login screen.
 const DEFAULT_SERVER = 'http://192.168.1.2:30041';
+
+// Pairing relay (RFC 8628 device-flow issuer) used by the "scan to sign in"
+// QR. Configured at build time via VITE_PAIR_ISSUER, overridable at runtime
+// (localStorage) for users who host their own relay. Empty => QR sign-in is
+// hidden and only the manual form shows.
+const DEFAULT_ISSUER = (import.meta as any).env?.VITE_PAIR_ISSUER || '';
+
+export function getPairIssuer(): string {
+  return localStorage.getItem(ISSUER_KEY) || DEFAULT_ISSUER;
+}
+
+export function setPairIssuer(url: string): void {
+  if (url) localStorage.setItem(ISSUER_KEY, url.trim());
+  else localStorage.removeItem(ISSUER_KEY);
+}
 
 export interface SessionUser {
   userId: string;

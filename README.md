@@ -8,10 +8,10 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 
 ## ✨ Features
 
-- 🔐 Log in to any Immich server with email + password
-- 🖼️ Browse your timeline in a justified photo grid
+- 🔐 Log in with email + password, or **scan a QR code with your phone**
+- 🖼️ Browse your timeline in a justified, day-grouped photo grid
 - 📚 Browse albums
-- 🔍 Search
+- 🔍 Search by text, plus browse **People** (faces) and **Places** (cities)
 - 🎬 Full-screen photo/video viewer with remote playback controls
 - 🕹️ D-pad spatial navigation tuned for the 10-foot experience
 
@@ -29,6 +29,30 @@ Grab the latest `com.immich.webos.ipk` from the [releases page](https://github.c
 ```bash
 ares-install --device <your-device> com.immich.webos.ipk
 ```
+
+## 📱 Sign in with your phone (QR)
+
+The login screen can show a QR code that lets you sign in from your phone
+instead of typing on the remote, using the standard
+[OAuth 2.0 Device Authorization Grant (RFC 8628)](https://datatracker.ietf.org/doc/html/rfc8628).
+
+On a webOS TV this works **out of the box** — a small JS service bundled in the
+app (`service/`) runs the pairing flow on the TV itself and logs in to your
+Immich server, so there's no external server to host and self-signed / no-CORS
+Immich instances work. The phone scans the QR (or opens the printed URL and
+enters the 8-character code), submits your Immich URL + credentials to the TV,
+and the TV signs in automatically. Credentials are used once and never stored.
+
+In a **desktop browser** (dev), there's no on-device service, so the QR panel
+is hidden unless you point it at an external relay:
+
+```bash
+VITE_PAIR_ISSUER=https://your-relay.example npm run build
+```
+
+A reference relay implementation lives in [`relay/`](relay/) (see its
+[README](relay/README.md)); [`relay/PROPOSAL.md`](relay/PROPOSAL.md) describes
+the contract for Immich to implement the device flow natively.
 
 ## 🛠️ Development
 
@@ -92,11 +116,15 @@ npm run launch     # ares-launch the installed app
 
 ```
 src/
-  api/         Immich REST client (auth, assets, media)
-  auth/        session storage
-  components/  Focusable primitives, photo grid, sidebar, icons
+  api/         Immich REST client, media cache, device-auth + relay bridge
+  auth/        session storage + pairing-issuer config
+  components/  Focusable primitives, photo grid, sidebar, QR code, icons
   nav/         remote key codes, spatial focus, back/exit handling
   views/       Login, Home, Albums, Search, Fullscreen
+  assets/      login background
+  fonts/       bundled Inter (Latin woff2)
+service/       on-device pairing relay (webOS JS service, packaged in the .ipk)
+relay/         reference external relay + RFC 8628 proposal for Immich
 public/        appinfo.json + icons/splash for the webOS package
 ```
 

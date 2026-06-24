@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "package": "npm run build && ares-package dist -o out",
+    "package": "npm run build && ares-package dist service -o out",
     "install-tv": "ares-install --device lg_c2 ./out/com.immich.webos_0.1.0_all.ipk",
     "launch": "ares-launch --device lg_c2 com.immich.webos",
     "deploy": "npm run package && npm run install-tv && npm run launch",
@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@mdi/js": "^7.4.47",
-    "preact": "^10.22.0"
+    "preact": "^10.22.0",
+    "qrcode-generator": "^1.5.2"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.9.0",

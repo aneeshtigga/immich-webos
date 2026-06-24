@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Sign in to Immich on your TV</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0a0a0a;
+        color: #e5e7eb;
+        font-family: -apple-system, system-ui, sans-serif;
+      }
+      .card { width: 100%; max-width: 380px; padding: 28px 24px; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      p.sub { color: #8a8a92; margin: 0 0 24px; font-size: 15px; }
+      label { display: block; font-size: 14px; color: #8a8a92; margin: 14px 0 6px; }
+      input {
+        width: 100%; box-sizing: border-box; font-size: 17px; padding: 13px 14px;
+        border-radius: 10px; border: 2px solid #232329; background: #18181b; color: #fff;
+        font-family: inherit;
+      }
+      input:focus { border-color: #4250af; outline: none; }
+      button {
+        width: 100%; margin-top: 22px; font-size: 17px; padding: 14px; border: none;
+        border-radius: 10px; background: #4250af; color: #fff; font-weight: 600;
+      }
+      button:disabled { opacity: 0.6; }
+      .scheme-row { display: flex; gap: 8px; margin-top: 8px; }
+      .scheme-btn {
+        width: auto; margin-top: 0; flex: 1; font-family: inherit; font-size: 15px;
+        padding: 10px; background: #18181b; color: #accbfa; border: 1px solid #232329;
+      }
+      .otp { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+      .otp-box {
+        width: 100%; min-width: 0; margin-top: 0; text-align: center; padding: 12px 0;
+        font-family: inherit; font-size: 22px; text-transform: uppercase;
+      }
+      .otp-dash { color: #8a8a92; font-size: 22px; }
+      .msg { margin-top: 16px; font-size: 15px; }
+      .err { color: #ff6b6b; }
+      .ok { color: #4ade80; text-align: center; }
+      .code { letter-spacing: 3px; font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Sign in to your TV</h1>
+      <p class="sub" id="sub">
+        Confirm the code <span class="code" id="codeShown"></span> shown on your TV, then sign in.
+      </p>
+      <form id="f">
+        <div id="codeField" style="display:none">
+          <label>Code shown on your TV</label>
+          <div class="otp" id="otp">
+            <input class="otp-box" data-i="0" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+            <input class="otp-box" data-i="1" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+            <input class="otp-box" data-i="2" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+            <input class="otp-box" data-i="3" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+            <span class="otp-dash">-</span>
+            <input class="otp-box" data-i="4" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+            <input class="otp-box" data-i="5" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+            <input class="otp-box" data-i="6" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+            <input class="otp-box" data-i="7" type="text" inputmode="text" autocapitalize="characters" maxlength="1" />
+          </div>
+        </div>
+        <label for="server">Immich server URL</label>
+        <input id="server" type="url" inputmode="url" placeholder="https://photos.example.com" required />
+        <div class="scheme-row">
+          <button type="button" class="scheme-btn" data-scheme="http://">http://</button>
+          <button type="button" class="scheme-btn" data-scheme="https://">https://</button>
+        </div>
+        <label for="email">Email</label>
+        <input id="email" type="email" inputmode="email" autocomplete="username" required />
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" required />
+        <button id="go" type="submit">Approve sign-in</button>
+      </form>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <script>
+      var params = new URLSearchParams(location.search);
+      var urlCode = params.get('user_code') || '';
+
+      var f = document.getElementById('f');
+      var msg = document.getElementById('msg');
+      var go = document.getElementById('go');
+      var serverInput = document.getElementById('server');
+      var codeField = document.getElementById('codeField');
+      var sub = document.getElementById('sub');
+      var boxes = document.querySelectorAll('.otp-box');
+
+      // The QR embeds the code in ?user_code=... If it's present, confirm it.
+      // If the page was opened bare (typed the URL by hand), show 8 single-char
+      // boxes to enter the code shown on the TV.
+      if (urlCode) {
+        document.getElementById('codeShown').textContent = urlCode;
+      } else {
+        codeField.style.display = 'block';
+        sub.textContent = 'Enter the code shown on your TV, then sign in.';
+        setupOtp();
+      }
+
+      function currentCode() {
+        if (urlCode) return urlCode.trim();
+        var s = '';
+        for (var i = 0; i < boxes.length; i++) s += boxes[i].value;
+        return s.trim();
+      }
+
+      // OTP behavior: type advances to the next box; Backspace on an empty box
+      // steps back; pasting the whole code (with or without the dash) fills all
+      // boxes at once.
+      function setupOtp() {
+        for (var i = 0; i < boxes.length; i++) {
+          boxes[i].addEventListener('input', function () {
+            this.value = this.value.toUpperCase();
+            var idx = +this.getAttribute('data-i');
+            if (this.value && idx < boxes.length - 1) boxes[idx + 1].focus();
+          });
+          boxes[i].addEventListener('keydown', function (ev) {
+            var idx = +this.getAttribute('data-i');
+            if (ev.keyCode === 8 && !this.value && idx > 0) {
+              boxes[idx - 1].focus();
+            }
+          });
+          boxes[i].addEventListener('paste', function (ev) {
+            ev.preventDefault();
+            var text = (ev.clipboardData || window.clipboardData).getData('text') || '';
+            var chars = text.replace(/[^A-Za-z0-9]/g, '').toUpperCase().split('');
+            for (var j = 0; j < boxes.length; j++) boxes[j].value = chars[j] || '';
+            var last = Math.min(chars.length, boxes.length) - 1;
+            if (last >= 0) boxes[last].focus();
+          });
+        }
+        boxes[0].focus();
+      }
+
+      // Quick scheme buttons: swap/prepend the scheme, keep the typed host.
+      var schemeBtns = document.querySelectorAll('.scheme-btn');
+      for (var s = 0; s < schemeBtns.length; s++) {
+        schemeBtns[s].addEventListener('click', function () {
+          var scheme = this.getAttribute('data-scheme');
+          serverInput.value = scheme + serverInput.value.replace(/^\s*https?:\/\//i, '');
+          serverInput.focus();
+        });
+      }
+
+      function norm(u) { return u.trim().replace(/\/+$/, '').replace(/\/api$/, ''); }
+
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        msg.className = 'msg';
+        msg.textContent = '';
+
+        var code = currentCode();
+        if (!code) {
+          msg.className = 'msg err';
+          msg.textContent = 'Enter the code shown on your TV.';
+          return;
+        }
+
+        go.disabled = true;
+        go.textContent = 'Signing in…';
+
+        var server = norm(document.getElementById('server').value);
+        var email = document.getElementById('email').value.trim();
+        var password = document.getElementById('password').value;
+
+        // Send credentials to the relay, which logs in to Immich server-side
+        // (browsers can't call Immich cross-origin unless it sends CORS headers,
+        // which many self-hosted instances don't). The relay uses the password
+        // for that one request and never stores it.
+        fetch('/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_code: code,
+            server_url: server,
+            email: email,
+            password: password,
+          }),
+        })
+          .catch(function () {
+            throw new Error('Could not reach the pairing relay. Is it still running, and is your phone on the same network?');
+          })
+          .then(function (r) {
+            if (r.ok) return r.json();
+            return r.json().then(function (b) {
+              var m = {
+                invalid_credentials: 'Wrong email or password.',
+                immich_unreachable: 'The relay could not reach Immich at ' + server + '. Check the server URL.',
+                immich_error: 'Immich returned an error. Check the server URL.',
+                invalid_user_code: 'This pairing code expired. Reopen the QR on your TV.',
+                invalid_request: 'Missing a field. Fill in all four.',
+              };
+              throw new Error(m[b.error] || ('Pairing failed (' + (b.error || r.status) + ').'));
+            });
+          })
+          .then(function () {
+            f.style.display = 'none';
+            msg.className = 'msg ok';
+            msg.innerHTML = '✓ Approved. Your TV will sign in now — you can close this page.';
+          })
+          .catch(fail);
+
+        function fail(err) {
+          msg.className = 'msg err';
+          msg.textContent = (err && err.message) || String(err) || 'Something went wrong.';
+          go.disabled = false;
+          go.textContent = 'Approve sign-in';
+        }
+      });
+    </script>
+  </body>
+</html>

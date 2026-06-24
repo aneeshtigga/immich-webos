@@ -1,0 +1,8 @@
+{
+  "name": "com.immich.webos.service",
+  "version": "0.1.0",
+  "description": "On-device pairing relay for the Immich webOS app",
+  "main": "relay.js",
+  "private": true,
+  "license": "MIT"
+}
