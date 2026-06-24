@@ -1,21 +1,21 @@
-# 📺 Immich for webOS
+# Immich for webOS
 
 A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch. Built with [Preact](https://preactjs.com/) + [Vite](https://vitejs.dev/), driven entirely by the LG remote.
 
-> Unofficial — "Immich" and its logo belong to the [Immich project](https://immich.app). 💙
+> Unofficial — "Immich" and its logo belong to the [Immich project](https://immich.app).
 
 [![Download latest .ipk](https://img.shields.io/github/v/release/aneeshtigga/immich-webos?label=Download%20.ipk&logo=lg&style=for-the-badge)](https://github.com/aneeshtigga/immich-webos/releases/latest/download/com.immich.webos.ipk)
 
-## ✨ Features
+## Features
 
-- 🔐 Log in with email + password, or **scan a QR code with your phone**
-- 🖼️ Browse your timeline in a justified, day-grouped photo grid
-- 📚 Browse albums
-- 🔍 Search by text, plus browse **People** (faces) and **Places** (cities)
-- 🎬 Full-screen photo/video viewer with remote playback controls
-- 🕹️ D-pad spatial navigation tuned for the 10-foot experience
+- Log in with email + password, or **scan a QR code with your phone**
+- Browse your timeline in a justified, day-grouped photo grid
+- Browse albums
+- Search by text, plus browse **People** (faces) and **Places** (cities)
+- Full-screen photo/video viewer with remote playback controls
+- D-pad spatial navigation tuned for the 10-foot experience
 
-## 📸 Screenshots
+## Screenshots
 
 <table>
   <tr>
@@ -52,14 +52,14 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 
 > Screenshots use the public Immich [demo server](https://demo.immich.app).
 
-## 📋 Requirements
+## Requirements
 
 - An [Immich](https://immich.app/) server you can reach from the TV
 - Node.js 18+
 - An LG webOS TV (webOS 5.0+ / Chromium 68+) in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app), or the webOS emulator
 - [`@webos-tools/cli`](https://www.npmjs.com/package/@webos-tools/cli) (installed as a dev dependency) for packaging and deploy
 
-## 📥 Install from a release
+## Install from a release
 
 Grab the latest `com.immich.webos.ipk` from the [releases page](https://github.com/aneeshtigga/immich-webos/releases/latest) (or the button above), then sideload it onto a TV in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app):
 
@@ -67,7 +67,7 @@ Grab the latest `com.immich.webos.ipk` from the [releases page](https://github.c
 ares-install --device <your-device> com.immich.webos.ipk
 ```
 
-## 📱 Sign in with your phone (QR)
+## Sign in with your phone (QR)
 
 The login screen can show a QR code that lets you sign in from your phone
 instead of typing on the remote, using the standard
@@ -91,7 +91,7 @@ A reference relay implementation lives in [`relay/`](relay/) (see its
 [README](relay/README.md)); [`relay/PROPOSAL.md`](relay/PROPOSAL.md) describes
 the contract for Immich to implement the device flow natively.
 
-## 🛠️ Development
+## Development
 
 ```bash
 npm install        # patch-package runs automatically via postinstall
@@ -100,7 +100,7 @@ npm run dev        # Vite dev server at http://localhost:5173
 
 In the browser, the remote is emulated: arrow keys = D-pad, Enter = select, **Esc** = Back.
 
-### ⚠️ CORS in the dev browser
+### CORS in the dev browser
 
 Sign-in may fail with **"Could not reach server… (Failed to fetch)"** even when the server is reachable. This is a browser-only quirk: depending on its config, an Immich server may not return an `Access-Control-Allow-Origin` header, so the browser blocks the cross-origin request from `http://localhost:5173`. The packaged TV app is unaffected — webOS loads from a `file://` origin and doesn't enforce CORS the same way.
 
@@ -132,7 +132,7 @@ google-chrome \
 
 Use this window only for local dev — it has web security turned off.
 
-## 🚀 Build & deploy to a TV
+## Build & deploy to a TV
 
 The deploy scripts target a webOS device registered with `ares-setup-device` under the name `lg_c2`. Rename in `package.json` to match your device.
 
@@ -149,7 +149,7 @@ npm run install-tv # ares-install the .ipk onto lg_c2
 npm run launch     # ares-launch the installed app
 ```
 
-## 📁 Project layout
+## Project layout
 
 ```
 src/
@@ -165,6 +165,6 @@ relay/         reference external relay + RFC 8628 proposal for Immich
 public/        appinfo.json + icons/splash for the webOS package
 ```
 
-## 📄 License
+## License
 
 [MIT](LICENSE)
