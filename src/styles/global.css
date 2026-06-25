@@ -98,7 +98,13 @@ select {
 /* ---------- Splash ---------- */
 .splash {
   position: fixed;
-  inset: 0;
+  /* longhand, not `inset` shorthand: webOS 6.x is Chromium 79; `inset` landed
+     in Cr87. Without offsets a fixed/absolute box collapses, blanking the
+     full-bleed overlay (this is why the splash/login went black on 6.5.3). */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 100;
   background: var(--bg);
   display: flex;
@@ -151,7 +157,6 @@ select {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 11vmin;
   padding: 4vmin 11vmin;
   /* if a very wide/short window can't fit the panels' natural height, scroll
      rather than clip the Sign-in button (the TV is true 16:9 and never does) */
@@ -159,13 +164,23 @@ select {
   position: relative;
   background: var(--bg) url('../assets/login-bg.webp') center / cover no-repeat;
 }
+/* flex `gap` shim: webOS 6.x is Chromium 79; flexbox `gap` landed in Cr84.
+   Single-line flex rows/columns get equivalent spacing from a margin on every
+   child after the first (the "owl" selector). Grid `gap` is fine (Cr66) and is
+   left as-is. */
+.login > * + * {
+  margin-left: 11vmin;
+}
 /* Scrim: darken the artwork so white text and the QR's caption stay readable
    over the bright blobs. Darker on the left (form) where text density is high,
    fading toward the QR side. */
 .login::before {
   content: '';
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: linear-gradient(
     100deg,
     rgba(10, 10, 10, 0.92) 0%,
@@ -213,7 +228,9 @@ select {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 2.4vmin;
+}
+.login-form > * + * {
+  margin-top: 2.4vmin;
 }
 
 /* Right panel — big QR + scan/code captions, centered */
@@ -273,9 +290,11 @@ select {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 10px;
   font-size: 24px;
   color: var(--fg);
+}
+.field > * + * {
+  margin-top: 10px;
 }
 /* Translucent frosted controls so they sit on the artwork instead of looking
    like opaque cut-out boxes against it. */
@@ -293,8 +312,10 @@ select {
 /* quick scheme-prefix buttons under the Server URL field */
 .scheme-row {
   display: flex;
-  gap: 10px;
   margin-top: 4px;
+}
+.scheme-row > * + * {
+  margin-left: 10px;
 }
 .scheme-btn {
   font-family: 'Inter';
@@ -394,30 +415,35 @@ select {
 .rail-brand {
   display: flex;
   align-items: center;
-  gap: 16px;
   height: 52px;
   padding: 0 0 18px 24px;
   color: var(--fg);
   font-size: 26px;
   font-weight: 700;
 }
+.rail-brand > * + * {
+  margin-left: 16px;
+}
 .rail-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
   margin-top: 8px;
+}
+.rail-nav > * + * {
+  margin-top: 4px;
 }
 .rail-foot {
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+}
+.rail-foot > * + * {
+  margin-top: 4px;
 }
 .rail-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 18px;
   height: 52px;
   /* 24px left padding centers the 26px icon in the 76px collapsed strip
      ((76-26)/2 ≈ 25); labels sit to its right and are clipped when collapsed. */
@@ -430,6 +456,9 @@ select {
   white-space: nowrap;
   cursor: pointer;
   transition: transform 0.08s ease;
+}
+.rail-item > * + * {
+  margin-left: 18px;
 }
 .rail-item:active {
   transform: scale(0.95);
@@ -497,7 +526,10 @@ select {
    caught here instead of opening a thumbnail. */
 .sidebar-catch {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 4;
   background: transparent;
 }
@@ -559,8 +591,10 @@ select {
 }
 .jrow {
   display: flex;
-  gap: 6px;
   margin-bottom: 6px;
+}
+.jrow > * + * {
+  margin-left: 6px;
 }
 .thumb {
   position: relative;
@@ -602,12 +636,16 @@ select {
   right: 6px;
   display: flex;
   align-items: center;
-  gap: 3px;
   font-size: 15px;
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
   padding: 2px 7px 2px 4px;
   border-radius: 6px;
+}
+/* gap shim: the duration is a bare text node (owl `> * + *` can't reach it),
+   so space it off the play icon with a margin on the icon itself. */
+.thumb-badge svg {
+  margin-right: 3px;
 }
 
 /* ---------- Albums ---------- */
@@ -637,7 +675,10 @@ select {
 }
 .album-cover > * {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
 }
 .album-cover-img {
   width: 100%;
@@ -665,12 +706,14 @@ select {
 .searchbar {
   display: flex;
   align-items: center;
-  gap: 12px;
   margin: 20px 24px 8px;
   padding: 6px 8px 6px 16px;
   background: var(--surface);
   border: 2px solid var(--surface-2);
   border-radius: 999px;
+}
+.searchbar > * + * {
+  margin-left: 12px;
 }
 .searchbar:focus-within {
   border-color: var(--immich-dark-primary);
@@ -756,9 +799,11 @@ select {
 /* People: horizontal row of circular face thumbnails */
 .people-row {
   display: flex;
-  gap: 20px;
   overflow-x: auto;
   padding: 4px 0 12px;
+}
+.people-row > * + * {
+  margin-left: 20px;
 }
 .person-chip {
   flex: 0 0 auto;
@@ -824,7 +869,10 @@ select {
 }
 .place-cover > * {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
 }
 .place-img {
   width: 100%;
@@ -832,7 +880,10 @@ select {
   object-fit: cover;
 }
 .place-label {
-  inset: auto 0 0 0;
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
   padding: 24px 14px 12px;
   font-size: 20px;
   font-weight: 600;
@@ -844,19 +895,23 @@ select {
 .result-head {
   display: flex;
   align-items: center;
-  gap: 16px;
   margin: 12px 24px 4px;
+}
+.result-head > * + * {
+  margin-left: 16px;
 }
 .result-back {
   display: flex;
   align-items: center;
-  gap: 8px;
   font-size: 19px;
   color: var(--fg);
   background: var(--surface);
   border: 2px solid var(--surface-2);
   border-radius: 999px;
   padding: 8px 18px 8px 14px;
+}
+.result-back > * + * {
+  margin-left: 8px;
 }
 .result-title {
   font-size: 24px;
@@ -867,7 +922,10 @@ select {
 /* ---------- Fullscreen viewer (photo + video) ---------- */
 .fs {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 50; /* above the sidebar (6) — viewer is a full overlay */
   background: #000;
   display: flex;
@@ -914,7 +972,10 @@ select {
 /* Overlay: hidden by default, shown when .fs has .show-ui (paused / activity) */
 .fs-ui {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   opacity: 0;
   transition: opacity 0.25s ease;
   pointer-events: none;
@@ -937,13 +998,14 @@ select {
 }
 .fs-top-right {
   display: flex;
-  gap: 12px;
+}
+.fs-top-right > * + * {
+  margin-left: 12px;
 }
 
 .fs-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
   font-size: 20px;
   color: #fff;
   background: rgba(40, 40, 46, 0.7);
@@ -951,6 +1013,9 @@ select {
   border-radius: 10px;
   padding: 10px 18px;
   cursor: pointer;
+}
+.fs-btn > * + * {
+  margin-left: 10px;
 }
 .fs-btn.round {
   padding: 12px;
@@ -1000,8 +1065,10 @@ select {
   bottom: 56px;
   display: flex;
   align-items: center;
-  gap: 18px;
   padding: 0 48px;
+}
+.fs-bottom > * + * {
+  margin-left: 18px;
 }
 .fs-time {
   font-size: 18px;
