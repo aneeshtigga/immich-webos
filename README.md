@@ -20,32 +20,26 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 <table>
   <tr>
     <td width="50%" align="center">
-      <img src="screenshots/login.png" alt="Login with phone QR sign-in" width="100%"><br>
-      <em>Login with phone QR sign-in</em>
+      <img src="screenshots/login.png" alt="Login with phone QR sign-in" width="100%">
     </td>
     <td width="50%" align="center">
-      <img src="screenshots/grid.png" alt="Justified, day-grouped photo timeline" width="100%"><br>
-      <em>Justified, day-grouped timeline grid</em>
+      <img src="screenshots/grid.png" alt="Justified, day-grouped photo timeline" width="100%">
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="screenshots/search.png" alt="Search with People and Places" width="100%"><br>
-      <em>Search — browse People &amp; Places</em>
+      <img src="screenshots/sidebar.png" alt="Auto-hiding sidebar" width="100%">
     </td>
     <td width="50%" align="center">
-      <img src="screenshots/bike.png" alt="Text search results" width="100%"><br>
-      <em>Text search results</em>
+      <img src="screenshots/search.png" alt="Search with People and Places" width="100%">
     </td>
   </tr>
   <tr>
     <td width="50%" align="center">
-      <img src="screenshots/albums.png" alt="Album browser" width="100%"><br>
-      <em>Album browser</em>
+      <img src="screenshots/bike.png" alt="Text search results" width="100%">
     </td>
     <td width="50%" align="center">
-      <img src="screenshots/sidebar.png" alt="Auto-hiding sidebar" width="100%"><br>
-      <em>Auto-hiding sidebar that grows in place</em>
+      <img src="screenshots/albums.png" alt="Album browser" width="100%">
     </td>
   </tr>
 </table>
