@@ -27,20 +27,24 @@ function lanIP() {
 
 const PORT = process.env.RELAY_PORT || '8788';
 const ip = lanIP();
-const issuer = `http://${ip}:${PORT}`;
+// PUBLIC_URL = LAN IP → goes into the QR code so the phone can reach the verify page.
+// VITE_PAIR_ISSUER = localhost → what the dev browser uses to POST /device_authorization.
+// These must be different: the phone can't reach localhost, the browser can't reach the LAN IP.
+const publicUrl = `http://${ip}:${PORT}`;
+const localUrl = `http://localhost:${PORT}`;
 
-console.log(`\n  pairing relay : ${issuer}`);
-console.log(`  QR sign-in    : enabled (VITE_PAIR_ISSUER=${issuer})\n`);
+console.log(`\n  pairing relay : ${publicUrl}`);
+console.log(`  QR sign-in    : enabled (VITE_PAIR_ISSUER=${localUrl})\n`);
 
 // shared stdio so both processes' logs stream to this terminal
 const relay = spawn('node', [join(root, 'relay', 'server.mjs')], {
   stdio: 'inherit',
-  env: { ...process.env, PORT, PUBLIC_URL: issuer },
+  env: { ...process.env, PORT, PUBLIC_URL: publicUrl },
 });
 
 const vite = spawn('npx', ['vite'], {
   stdio: 'inherit',
-  env: { ...process.env, VITE_PAIR_ISSUER: issuer },
+  env: { ...process.env, VITE_PAIR_ISSUER: localUrl },
 });
 
 // if either dies, tear down the other so we don't leave an orphan. Child
