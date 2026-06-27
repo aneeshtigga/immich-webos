@@ -589,12 +589,32 @@ select {
   margin: 22px 0 10px;
   color: var(--fg);
 }
+.jrow-wrap {
+  margin-bottom: 10px;
+}
+.jrow-header {
+  position: relative;
+  height: 32px;
+  margin-bottom: 4px;
+}
+.day-label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+}
 .jrow {
   display: flex;
-  margin-bottom: 6px;
 }
 .jrow > * + * {
   margin-left: 6px;
+}
+.day-sep {
+  flex: 0 0 5px;
+  width: 5px;
 }
 .thumb {
   position: relative;
@@ -941,6 +961,16 @@ select {
   height: auto;
   object-fit: contain;
 }
+/* thumbnail placeholder shown while the full preview fetches. position:absolute
+   so it fills the .fs container without disturbing the flex-centered .fs-img. */
+.fs-thumb-ph {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
 .fs-video {
   width: 100%;
   height: 100%;
@@ -998,9 +1028,20 @@ select {
 }
 .fs-top-right {
   display: flex;
+  align-items: center;
 }
 .fs-top-right > * + * {
   margin-left: 12px;
+}
+.fs-location {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg);
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
 }
 
 .fs-btn {
