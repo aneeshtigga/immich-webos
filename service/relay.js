@@ -30,6 +30,12 @@ var path = require('path');
 var crypto = require('crypto');
 var urlmod = require('url');
 
+var REPO = 'aneeshtigga/immich-webos';
+var APP_ID = 'com.immich.webos';
+var appinfo = {};
+try { appinfo = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'appinfo.json'), 'utf8')); } catch (e) {}
+var CURRENT_VERSION = appinfo.version || '0.0.0';
+
 var service = new Service('com.immich.webos.service');
 
 var PORT = 8790;
@@ -258,4 +264,44 @@ service.register('start', function (message) {
 
 service.register('ping', function (message) {
   message.respond({ returnValue: true, base: publicBase(), listening: !!server });
+});
+
+// Follows up to 5 redirects (GitHub release assets return a 302 to S3).
+function httpsGet(url, cb, _hops) {
+  _hops = _hops || 0;
+  var u = urlmod.parse(url);
+  var opts = {
+    hostname: u.hostname,
+    port: u.port || 443,
+    path: u.path,
+    method: 'GET',
+    headers: { 'User-Agent': 'immich-webos-tv/' + CURRENT_VERSION, 'Accept': 'application/json' },
+    rejectUnauthorized: false,
+  };
+  var req = https.request(opts, function (res) {
+    if ((res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307) && res.headers.location && _hops < 5) {
+      return httpsGet(res.headers.location, cb, _hops + 1);
+    }
+    var chunks = '';
+    res.on('data', function (c) { chunks += c; });
+    res.on('end', function () { cb(null, res.statusCode, chunks); });
+  });
+  req.on('error', function (e) { cb(e); });
+  req.end();
+}
+
+// Check GitHub releases for a newer version; if found, install via applicationmanager.
+service.register('selfUpdate', function (message) {
+  httpsGet('https://api.github.com/repos/' + REPO + '/releases/latest', function (err, status, body) {
+    if (err) return message.respond({ returnValue: false, errorText: 'Network error: ' + (err.message || err) });
+    var release;
+    try { release = JSON.parse(body); } catch (e) {
+      return message.respond({ returnValue: false, errorText: 'Bad response from GitHub' });
+    }
+    var latestTag = (release.tag_name || '').replace(/^v/, '');
+    if (latestTag === CURRENT_VERSION) {
+      return message.respond({ returnValue: true, upToDate: true, version: CURRENT_VERSION });
+    }
+    message.respond({ returnValue: true, updateAvailable: true, latestVersion: latestTag, currentVersion: CURRENT_VERSION });
+  });
 });

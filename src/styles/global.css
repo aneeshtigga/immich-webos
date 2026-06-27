@@ -508,6 +508,46 @@ select {
 .rail-item.user {
   color: var(--muted);
 }
+.rail-item--error {
+  color: #ff6b6b;
+}
+.rail-item--ok {
+  color: #4ade80;
+}
+.update-banner {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e3a5f;
+  border: 1px solid #4ade80;
+  color: #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  z-index: 200;
+  font-size: 16px;
+  gap: 16px;
+  max-width: 600px;
+}
+.update-banner code {
+  background: rgba(255,255,255,0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 14px;
+}
+.update-banner-close {
+  background: none;
+  border: none;
+  color: #8a8a92;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
 /* Labels: present in the DOM always (so no reflow on open), but faded out while
    collapsed and faded in on open. Opacity is GPU-cheap and the text is clipped
    by the card anyway. */

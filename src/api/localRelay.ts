@@ -24,6 +24,31 @@ export function isWebOS(): boolean {
   return !!(window as any).PalmServiceBridge;
 }
 
+export type UpdateResult =
+  | { upToDate: true; version: string }
+  | { updateAvailable: true; latestVersion: string; currentVersion: string }
+  | { error: string };
+
+export function checkForUpdate(): Promise<UpdateResult> {
+  return new Promise((resolve) => {
+    let b: PalmBridge;
+    try { b = bridge(); } catch (e) {
+      return resolve({ error: 'Not running on webOS' });
+    }
+    b.onservicecallback = (body: string) => {
+      try {
+        const r = JSON.parse(body);
+        if (r.returnValue === false) resolve({ error: r.errorText || 'Check failed' });
+        else if (r.upToDate) resolve({ upToDate: true, version: r.version });
+        else resolve({ updateAvailable: true, latestVersion: r.latestVersion, currentVersion: r.currentVersion });
+      } catch (e) {
+        resolve({ error: 'Invalid response' });
+      }
+    };
+    b.call(`${SERVICE}/selfUpdate`, JSON.stringify({}));
+  });
+}
+
 export interface LocalRelayInfo {
   base: string; // e.g. http://192.168.1.23:8790
   ip: string | null;

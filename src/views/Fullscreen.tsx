@@ -35,6 +35,7 @@ const HIDE_MS = 3000;
 export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [i, setI] = useState(index);
   const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [imgReady, setImgReady] = useState(false);
   const [thumbSrc, setThumbSrc] = useState<string | null>(null);
   const [location, setLocation] = useState<string | null>(null);
   const [paused, setPaused] = useState(true);
@@ -114,10 +115,12 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   useEffect(() => {
     if (!asset || asset.isVideo) {
       setImgSrc(null);
+      setImgReady(false);
       return;
     }
     let alive = true;
     setImgSrc(null);
+    setImgReady(false);
     loadBlobUrl(thumbnailUrl(asset.id, 'preview'))
       .then((url) => {
         if (!alive) return revoke(url);
@@ -327,13 +330,13 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
         )
       ) : (
         <>
-          {thumbSrc && !imgSrc && <img class="fs-thumb-ph" src={thumbSrc} />}
-          {imgSrc && <img class="fs-img" src={imgSrc} />}
+          {thumbSrc && !imgReady && <img class="fs-thumb-ph" src={thumbSrc} />}
+          {imgSrc && <img class="fs-img" src={imgSrc} onLoad={() => setImgReady(true)} />}
         </>
       )}
 
       {/* centered loading spinner: photo not yet decoded, or video buffering */}
-      {((!isVideo && !imgSrc) || (isVideo && buffering && !videoErr)) && (
+      {((!isVideo && !imgReady) || (isVideo && buffering && !videoErr)) && (
         <div class="fs-spinner" />
       )}
 
