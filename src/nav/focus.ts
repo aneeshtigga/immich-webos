@@ -71,9 +71,11 @@ export function focusFirst(): void {
   if (els.length) focus(els[0]);
 }
 
-export function focus(el: HTMLElement): void {
+// instant=true: jump scrollTop directly instead of easing — use when returning
+// from a fullscreen overlay so the animation doesn't fight user scroll input.
+export function focus(el: HTMLElement, instant = false): void {
   el.focus({ preventScroll: true }); // we scroll manually, eased (below)
-  retarget(el);
+  retarget(el, instant);
 }
 
 // Nearest ancestor that actually scrolls on the given axis. Axis-specific
@@ -125,7 +127,9 @@ let animRaf = 0;
 
 // Compute the desired absolute scroll position to bring `el` inside the safe
 // zone, set it as the animation target per axis, and ensure the loop runs.
-function retarget(el: HTMLElement): void {
+// instant=true skips the RAF loop and sets scrollTop directly — avoids the
+// animation fighting with magic-remote wheel/gesture scroll on return from fullscreen.
+function retarget(el: HTMLElement, instant = false): void {
   const scY = scrollParent(el, 'y');
   const scX = scrollParent(el, 'x');
   if (!scY && !scX) {
@@ -144,8 +148,14 @@ function retarget(el: HTMLElement): void {
     let d = 0;
     if (er.top - pend < cr.top + margin) d = er.top - pend - (cr.top + margin);
     else if (er.bottom - pend > cr.bottom - margin) d = er.bottom - pend - (cr.bottom - margin);
-    animY.sc = scY;
-    animY.target = Math.max(0, Math.min(scY.scrollHeight - scY.clientHeight, base + d));
+    const target = Math.max(0, Math.min(scY.scrollHeight - scY.clientHeight, base + d));
+    if (instant) {
+      scY.scrollTop = target;
+      animY.sc = null; // cancel any prior animation on this axis
+    } else {
+      animY.sc = scY;
+      animY.target = target;
+    }
   }
 
   if (scX) {
@@ -156,11 +166,17 @@ function retarget(el: HTMLElement): void {
     let d = 0;
     if (er.left - pend < cr.left + margin) d = er.left - pend - (cr.left + margin);
     else if (er.right - pend > cr.right - margin) d = er.right - pend - (cr.right - margin);
-    animX.sc = scX;
-    animX.target = Math.max(0, Math.min(scX.scrollWidth - scX.clientWidth, base + d));
+    const target = Math.max(0, Math.min(scX.scrollWidth - scX.clientWidth, base + d));
+    if (instant) {
+      scX.scrollLeft = target;
+      animX.sc = null;
+    } else {
+      animX.sc = scX;
+      animX.target = target;
+    }
   }
 
-  if (!animRaf) animRaf = requestAnimationFrame(tick);
+  if (!instant && !animRaf) animRaf = requestAnimationFrame(tick);
 }
 
 // Ease one axis toward its target; returns true when that axis is still moving.
