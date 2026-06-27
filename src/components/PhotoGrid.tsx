@@ -6,11 +6,18 @@ import { Thumb } from './Thumb';
 import { bucketObserver } from './lazyObserver';
 import { justify, targetRowHeight, GRID_GAP as GAP } from './justified';
 
+const DAY_SEP = 5; // px gap inserted between day-groups on a shared row
+const MIN_LABEL_WIDTH = 230; // min px between consecutive day labels (prevents collision)
+
 interface Props {
   // loaders injected so the same grid serves timeline / albums / favorites
   loadBuckets: () => Promise<TimeBucket[]>;
   loadBucket: (timeBucket: string) => Promise<BucketColumns>;
   onOpen: (assets: Asset[], index: number) => void;
+  // ref filled with a function that loads the next unloaded bucket; caller invokes it to prefetch
+  loadNextUnloaded?: { current: (() => void) | null };
+  // called whenever the flat asset list grows (new bucket loaded)
+  onAssetsChange?: (assets: Asset[]) => void;
 }
 
 // Date-bucketed, justified-row photo grid (Immich timeline look). Buckets load
@@ -22,11 +29,11 @@ interface Props {
 // re-renders ONLY that section — not all N previously loaded sections. Without
 // this the grid did O(N) justify()+vnode work on every bucket load, which is
 // why the UI degraded the longer you scrolled.
-export function PhotoGrid({ loadBuckets, loadBucket, onOpen }: Props) {
+export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, onAssetsChange }: Props) {
   const [buckets, setBuckets] = useState<TimeBucket[]>([]);
   const [loaded, setLoaded] = useState<Record<string, Asset[]>>({});
   const [error, setError] = useState('');
-  const [width, setWidth] = useState(window.innerWidth - 96);
+  const [width, setWidth] = useState(window.innerWidth - 96 - 32);
   const [rowH, setRowH] = useState(targetRowHeight());
   const loadingRef = useRef<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -37,8 +44,23 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen }: Props) {
   loadedRef.current = loaded;
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
+  const onAssetsChangeRef = useRef(onAssetsChange);
+  onAssetsChangeRef.current = onAssetsChange;
   const flatRef = useRef<Asset[]>([]);
   const offsetRef = useRef<Record<string, number>>({});
+
+  // keep loadNextUnloaded.current pointed at a fresh closure so callers always
+  // get the next truly-unloaded bucket regardless of when they invoke it
+  const bucketsRef = useRef(buckets);
+  bucketsRef.current = buckets;
+  if (loadNextUnloaded) {
+    loadNextUnloaded.current = () => {
+      const next = bucketsRef.current.find(
+        (b) => !loadedRef.current[b.timeBucket] && !loadingRef.current.has(b.timeBucket),
+      );
+      if (next) ensureBucket(next.timeBucket);
+    };
+  }
 
   useEffect(() => {
     loadBuckets()
@@ -55,6 +77,12 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen }: Props) {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // notify caller whenever the flat asset list grows so it can update live views
+  useEffect(() => {
+    onAssetsChangeRef.current?.(flatRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // Stable: reads `loaded` via ref, so it never changes identity. Passed to
   // every section as-is.
@@ -144,41 +172,105 @@ const BucketSection = memo(function BucketSection({
     return () => bucketObserver.unobserve(el);
   }, [tb, ensureBucket]);
 
-  // Server buckets are monthly; subdivide into calendar-day groups for finer
-  // headers (assets arrive date-sorted, so consecutive same-day runs group
-  // cleanly). `base` is the running bucket-local index so fullscreen traversal
-  // still indexes into the flat per-bucket asset list.
+  // Pack consecutive day-groups into shared rows when they fit.
+  // A day is merged into the current unit only if:
+  //   1. combined ratioSum fits in one row at rowH (with separator pixels deducted)
+  //   2. pixel gap between the last label and the new label >= MIN_LABEL_WIDTH
   const days = assets ? groupByDay(assets) : [];
+  const units: Asset[][] = [];
+  if (days.length) {
+    let cur: Asset[] = [];
+    let curRatioSum = 0;
+    let lastLabelRatioSum = 0; // ratio offset of the most-recent day label
+    let curSeps = 0;           // separator divs already in cur
+    for (const day of days) {
+      const dayRatioSum = day.assets.reduce((s, a) => s + Math.max(a.ratio, 0.1), 0);
+      if (cur.length === 0) {
+        cur = day.assets.slice();
+        curRatioSum = dayRatioSum;
+        lastLabelRatioSum = 0;
+        curSeps = 0;
+      } else {
+        // effWidth: container minus the separator divs that will be rendered
+        const effWidth = width - (curSeps + 1) * (DAY_SEP + GAP);
+        const mergedTotal = curRatioSum + dayRatioSum;
+        // pixel distance between the last label and this new label in the merged row
+        const labelGap = (curRatioSum - lastLabelRatioSum) * effWidth / mergedTotal;
+        if (mergedTotal <= effWidth / rowH && labelGap >= MIN_LABEL_WIDTH) {
+          lastLabelRatioSum = curRatioSum;
+          cur.push(...day.assets);
+          curRatioSum = mergedTotal;
+          curSeps++;
+        } else {
+          units.push(cur);
+          cur = day.assets.slice();
+          curRatioSum = dayRatioSum;
+          lastLabelRatioSum = 0;
+          curSeps = 0;
+        }
+      }
+    }
+    if (cur.length) units.push(cur);
+  }
+
+  let bucketIdx = 0;
 
   return (
     <section ref={ref} class="bucket">
       {assets ? (
-        days.map((day) => {
-          const rows = justify(day.assets, width, rowH, GAP);
-          let idx = day.base; // bucket-local index of the first asset this day
-          return (
-            <div class="day" key={day.key}>
-              <h2 class="bucket-title">{formatDay(day.key)}</h2>
-              {rows.map((row, ri) => (
-                <div class="jrow" key={ri} style={{ height: `${row.height}px` }}>
-                  {row.items.map((a) => {
-                    const myIdx = idx++;
-                    return (
-                      <Thumb
-                        key={a.id}
-                        assetId={a.id}
-                        isVideo={a.isVideo}
-                        duration={a.duration}
-                        width={a.w}
-                        height={a.h}
-                        onSelect={() => onOpen(tb, myIdx)}
-                      />
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          );
+        units.map((unitAssets, ui) => {
+          const nSeps = Math.max(0, new Set(unitAssets.map((a) => dayKey(a.createdAt))).size - 1);
+          const effWidth = width - nSeps * (DAY_SEP + GAP);
+          const rows = justify(unitAssets, effWidth, rowH, GAP);
+          let rowOffset = 0;
+          let prevDk: string | undefined; // persists across rows — no duplicate labels
+          const rowEls = rows.map((row, ri) => {
+            const labels: Array<{ left: number; text: string }> = [];
+            const rowChildren: preact.ComponentChildren[] = [];
+            let cumX = 0;
+            row.items.forEach((a, j) => {
+              const dk = dayKey(a.createdAt);
+              const isNewDay = dk !== prevDk;
+              if (isNewDay && j > 0) {
+                rowChildren.push(<div class="day-sep" key={`sep${j}`} />);
+                cumX += DAY_SEP + GAP;
+              }
+              if (isNewDay) {
+                labels.push({ left: cumX, text: formatDay(dk) });
+                prevDk = dk;
+              }
+              const myIdx = bucketIdx + rowOffset + j;
+              rowChildren.push(
+                <Thumb
+                  key={a.id}
+                  assetId={a.id}
+                  isVideo={a.isVideo}
+                  duration={a.duration}
+                  width={a.w}
+                  height={a.h}
+                  onSelect={() => onOpen(tb, myIdx)}
+                />,
+              );
+              cumX += a.w + GAP;
+            });
+            rowOffset += row.items.length;
+            return (
+              <div class="jrow-wrap" key={`${ui}-${ri}`}>
+                {labels.length > 0 && (
+                  <div class="jrow-header">
+                    {labels.map((l) => (
+                      <span class="day-label" style={{ left: `${l.left}px` }} key={l.text}>
+                        {l.text}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div class="jrow" style={{ height: `${row.height}px` }}>{rowChildren}</div>
+              </div>
+            );
+          });
+          bucketIdx += unitAssets.length;
+          return rowEls;
         })
       ) : (
         <>

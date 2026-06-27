@@ -9,7 +9,7 @@ export const GRID_GAP = 6;
 // viewport if it ever changes. Shared by the timeline grid and search results.
 export function targetRowHeight(): number {
   const h = window.innerHeight || 720;
-  return Math.round(Math.max(200, Math.min(320, h * 0.26)));
+  return Math.round(Math.max(250, Math.min(400, h * 0.325)));
 }
 
 export interface PlacedAsset extends Asset {
