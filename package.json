@@ -1,6 +1,6 @@
 {
   "name": "immich-webos",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Native webOS TV app for browsing an Immich photo/video server",
   "private": true,
   "license": "MIT",
@@ -13,7 +13,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "package": "npm run build && ares-package dist service -o out",
-    "install-tv": "ares-install --device lg_c2 ./out/com.immich.webos_0.6.1_all.ipk",
+    "install-tv": "ares-install --device lg_c2 ./out/com.immich.webos_0.7.0_all.ipk",
     "launch": "ares-launch --device lg_c2 com.immich.webos",
     "deploy": "npm run package && npm run install-tv && npm run launch",
     "postinstall": "patch-package"
