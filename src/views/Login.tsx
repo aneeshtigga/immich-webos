@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'preact/hooks';
+import { ImmichLogo } from '../components/ImmichLogo';
 import { login } from '../api/client';
 import { getServer, saveSession, normalizeServer, getPairIssuer } from '../auth/store';
 import { useRemote } from '../nav/useRemote';
@@ -178,7 +179,12 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <div class={'login' + (qrEnabled ? ' login--split' : '')}>
       <div class="login-left">
-        <img class="login-logo" src="./immich-logo-inline.svg" alt="Immich" />
+        <div class="login-brand">
+          <ImmichLogo class="login-logo" />
+          <div class="login-brand-text">
+            <span class="login-brand-name">immich <span class="login-brand-platform">webOS</span></span>
+          </div>
+        </div>
         <h1 class="login-heading">Sign in to your server</h1>
         <form ref={formRef} class="login-form" onSubmit={submit}>
         <label class="field">

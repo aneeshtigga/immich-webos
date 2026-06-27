@@ -110,7 +110,7 @@ export function Sidebar({ open, active, userName, onNavigate, onLogout }: Props)
       {/* fixed-width inner: never reflows as the outer card animates width */}
       <div class="rail-inner">
         <div class="rail-brand">
-          <ImmichLogo size={30} />
+          <ImmichLogo size={40} />
           <span class="rail-label">Immich</span>
         </div>
 
