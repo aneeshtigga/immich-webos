@@ -28,7 +28,6 @@ interface Props {
   userName?: string;
   onNavigate: (r: Route) => void;
   onLogout: () => void;
-  onUpdateAvailable?: (version: string) => void;
 }
 
 // Single floating rail card. Collapsed it's a 76px icon strip; open it widens
@@ -47,7 +46,7 @@ interface Props {
 // focus order. Collapsed, they remain pointer-clickable (magic remote).
 type UpdateStatus = 'idle' | 'checking' | 'upToDate' | 'installing' | 'error';
 
-export function Sidebar({ open, active, userName, onNavigate, onLogout, onUpdateAvailable }: Props) {
+export function Sidebar({ open, active, userName, onNavigate, onLogout }: Props) {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [updateLabel, setUpdateLabel] = useState(APP_VERSION);
 
@@ -72,7 +71,6 @@ export function Sidebar({ open, active, userName, onNavigate, onLogout, onUpdate
       } else {
         setUpdateLabel('v' + result.latestVersion + ' available');
         setUpdateStatus('upToDate');
-        onUpdateAvailable?.(result.latestVersion);
       }
     }
   };

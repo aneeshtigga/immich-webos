@@ -35,7 +35,6 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const [album, setAlbum] = useState<Album | null>(null);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   // The content focusable (thumbnail) that had focus when the sidebar was
   // opened, so collapsing the sidebar restores it instead of jumping to the top
@@ -200,14 +199,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         userName={user?.name}
         onNavigate={navigate}
         onLogout={doLogout}
-        onUpdateAvailable={(v) => setUpdateVersion(v)}
       />
-      {updateVersion && (
-        <div class="update-banner">
-          <span>v{updateVersion} available — install via <code>npm run deploy</code> from your Mac</span>
-          <button class="update-banner-close" onClick={() => setUpdateVersion(null)}>✕</button>
-        </div>
-      )}
       {/* Invisible click-catcher over the content while the sidebar is open: a
           pointer click anywhere outside the sidebar (magic remote / mouse)
           collapses it. Transparent — no dark scrim — and it sits below the
