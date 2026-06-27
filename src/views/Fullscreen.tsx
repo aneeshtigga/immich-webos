@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'preact/hooks';
 import { Asset } from '../api/assets';
-import { loadBlobUrl, revoke } from '../api/media';
-import { thumbnailUrl, videoStreamUrl, originalStreamUrl } from '../api/client';
+import { loadBlobUrl, loadThumb, revoke } from '../api/media';
+import { thumbnailUrl, videoStreamUrl, originalStreamUrl, getAssetLocation } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { Icon } from '../components/Icon';
 
@@ -11,6 +11,8 @@ interface Props {
   // reports the index being viewed at close time so the grid can restore focus
   // to that exact photo (the user may have paged left/right while in here).
   onClose: (index: number) => void;
+  // called when within 5 of the last loaded asset, so the grid can prefetch the next bucket
+  onNearEnd?: () => void;
 }
 
 type Quality = 'transcoded' | 'original';
@@ -30,9 +32,11 @@ const HIDE_MS = 3000;
 //
 // On-screen buttons are clickable with the LG magic-remote pointer; the d-pad
 // keeps fixed media semantics rather than moving focus between buttons.
-export function Fullscreen({ assets, index, onClose }: Props) {
+export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [i, setI] = useState(index);
   const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [thumbSrc, setThumbSrc] = useState<string | null>(null);
+  const [location, setLocation] = useState<string | null>(null);
   const [paused, setPaused] = useState(true);
   const [progress, setProgress] = useState({ cur: 0, dur: 0 });
   const [quality, setQuality] = useState<Quality>('transcoded');
@@ -46,9 +50,19 @@ export function Fullscreen({ assets, index, onClose }: Props) {
   const resumeAt = useRef(0); // remember position across quality switch
   const seekRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const nearEndFiredRef = useRef(0);
 
   const asset = assets[i];
   const isVideo = !!asset?.isVideo;
+
+  // fire onNearEnd when within 5 of the end so the grid prefetches the next bucket
+  useEffect(() => {
+    if (!onNearEnd) return;
+    if (assets.length - i <= 5 && assets.length !== nearEndFiredRef.current) {
+      nearEndFiredRef.current = assets.length;
+      onNearEnd();
+    }
+  }, [i, assets.length, onNearEnd]);
 
   // ---- overlay auto-hide ----
   const poke = useCallback(
@@ -67,6 +81,34 @@ export function Fullscreen({ assets, index, onClose }: Props) {
     poke(true);
     return () => window.clearTimeout(hideTimer.current);
   }, [i, paused, poke]);
+
+  // ---- thumbnail placeholder (shown while preview loads) ----
+  // loadThumb is a cache-hit for any asset the grid already rendered, so this
+  // resolves on the next microtask and the placeholder appears instantly.
+  useEffect(() => {
+    if (!asset || asset.isVideo) {
+      setThumbSrc(null);
+      return;
+    }
+    let alive = true;
+    loadThumb(asset.id).then((url) => { if (alive) setThumbSrc(url); }).catch(() => {});
+    return () => { alive = false; };
+  }, [asset?.id]);
+
+  // ---- location tag ----
+  useEffect(() => {
+    if (!asset) { setLocation(null); return; }
+    let alive = true;
+    getAssetLocation(asset.id)
+      .then((loc) => {
+        if (!alive) return;
+        const parts = [loc.city, loc.state, loc.country].filter(Boolean) as string[];
+        const deduped = parts.filter((p, i) => p !== parts[i - 1]);
+        setLocation(deduped.length ? deduped.join(', ') : null);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [asset?.id]);
 
   // ---- photo loading (preview JPEG) ----
   useEffect(() => {
@@ -283,9 +325,12 @@ export function Fullscreen({ assets, index, onClose }: Props) {
             }}
           />
         )
-      ) : imgSrc ? (
-        <img class="fs-img" src={imgSrc} />
-      ) : null}
+      ) : (
+        <>
+          {thumbSrc && !imgSrc && <img class="fs-thumb-ph" src={thumbSrc} />}
+          {imgSrc && <img class="fs-img" src={imgSrc} />}
+        </>
+      )}
 
       {/* centered loading spinner: photo not yet decoded, or video buffering */}
       {((!isVideo && !imgSrc) || (isVideo && buffering && !videoErr)) && (
@@ -301,6 +346,7 @@ export function Fullscreen({ assets, index, onClose }: Props) {
             <span>Back</span>
           </button>
           <div class="fs-top-right">
+            {location && <span class="fs-location">{location}</span>}
             {isVideo && (
               <button class="fs-btn" onClick={cycleQuality} title="Video quality">
                 <Icon name="hd" size={26} />

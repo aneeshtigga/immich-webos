@@ -41,6 +41,9 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   // of the grid. The grid never unmounts on a sidebar toggle, so its scroll
   // position is already intact — only focus needs returning.
   const lastContentFocus = useRef<HTMLElement | null>(null);
+  const loadNextRef = useRef<(() => void) | null>(null);
+  const viewerRef = useRef(viewer);
+  viewerRef.current = viewer;
   const user = getUser();
 
   // open the sidebar and focus its currently-active tab
@@ -85,23 +88,38 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     setViewer({ assets, index });
   }, []);
 
+  // update the live asset list in the viewer as the grid loads more buckets
+  const handleAssetsChange = useCallback((assets: Asset[]) => {
+    setViewer((v) => (v ? { ...v, assets } : null));
+  }, []);
+
+  // called by Fullscreen when near the end; delegates to the mounted grid
+  const handleNearEnd = useCallback(() => {
+    loadNextRef.current?.();
+  }, []);
+
   // Close the viewer and return focus to the thumbnail of the photo last shown
   // (the user may have paged left/right inside the viewer). The grid was never
   // unmounted, so its scroll position and loaded buckets are intact and the
   // target thumb is already in the DOM; focus() also scrolls it into view.
+  // Stable identity (no viewer dep) so Fullscreen's key-handler effect doesn't
+  // tear down and re-attach on every bucket load (which would create a brief gap
+  // where key presses are dropped). viewerRef always mirrors the latest viewer.
   const closeViewer = useCallback(
     (index: number) => {
-      const id = viewer?.assets[index]?.id;
+      const id = viewerRef.current?.assets[index]?.id;
       setViewer(null);
       setTimeout(() => {
         const el = id
           ? rootRef.current?.querySelector<HTMLElement>(`[data-asset-id="${id}"]`)
           : null;
-        if (el) focus(el);
+        // instant=true: avoid the eased RAF animation fighting magic-remote scroll
+        if (el) focus(el, true);
         else focusFirstContent();
       }, 0);
     },
-    [viewer],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
   // Focus the first content (non-sidebar) focusable. The grid loads its first
@@ -172,6 +190,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
           assets={viewer.assets}
           index={viewer.index}
           onClose={closeViewer}
+          onNearEnd={handleNearEnd}
         />
       )}
       <Sidebar
@@ -198,18 +217,24 @@ export function Home({ onLogout }: { onLogout: () => void }) {
               loadBuckets={() => getAlbumBuckets(album.id)}
               loadBucket={(tb) => getAlbumBucket(album.id, tb)}
               onOpen={openViewer}
+              loadNextUnloaded={loadNextRef}
+              onAssetsChange={handleAssetsChange}
             />
           ) : route === 'timeline' ? (
             <PhotoGrid
               loadBuckets={getTimelineBuckets}
               loadBucket={getBucket}
               onOpen={openViewer}
+              loadNextUnloaded={loadNextRef}
+              onAssetsChange={handleAssetsChange}
             />
           ) : route === 'favorites' ? (
             <PhotoGrid
               loadBuckets={getFavoriteBuckets}
               loadBucket={getFavoriteBucket}
               onOpen={openViewer}
+              loadNextUnloaded={loadNextRef}
+              onAssetsChange={handleAssetsChange}
             />
           ) : route === 'search' ? (
             <Search onOpen={openViewer} />

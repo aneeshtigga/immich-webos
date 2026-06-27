@@ -282,6 +282,26 @@ export async function searchByCity(city: string): Promise<import('./assets').Ass
 //    and cross-origin cookie auth is unavailable, so the query token is the
 //    only way to stream directly.
 
+export interface AssetLocation {
+  city?: string;
+  state?: string;
+  country?: string;
+}
+
+const locationCache = new Map<string, AssetLocation>();
+
+export async function getAssetLocation(id: string): Promise<AssetLocation> {
+  if (locationCache.has(id)) return locationCache.get(id)!;
+  const a = await jsonReq<{ exifInfo?: { city?: string; state?: string; country?: string } }>(`/assets/${id}`);
+  const loc: AssetLocation = {
+    city: a.exifInfo?.city ?? undefined,
+    state: a.exifInfo?.state ?? undefined,
+    country: a.exifInfo?.country ?? undefined,
+  };
+  locationCache.set(id, loc);
+  return loc;
+}
+
 export function thumbnailUrl(id: string, size: 'thumbnail' | 'preview' = 'thumbnail'): string {
   return `${base()}/assets/${id}/thumbnail?size=${size}`;
 }
