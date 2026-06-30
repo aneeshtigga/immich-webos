@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 // webOS loads the packaged app over file:// (inside the .ipk container).
 // Chromium refuses to fetch a `type="module"` script over file:// — the origin
@@ -26,10 +27,32 @@ function webosClassicScript() {
   };
 }
 
+// Single source of truth for the version is the root package.json (the sidebar
+// already displays pkg.version). appinfo.json is what the on-device service
+// reads as CURRENT_VERSION to compare against the GitHub releases/latest tag,
+// and it also names the .ipk — so stamp the built dist/appinfo.json from
+// package.json at build time. Keeps the displayed version, the update check,
+// and the package filename from drifting apart on a release bump.
+function stampAppinfoVersion() {
+  return {
+    name: 'stamp-appinfo-version',
+    apply: 'build' as const,
+    closeBundle() {
+      const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+      const p = 'dist/appinfo.json';
+      const info = JSON.parse(readFileSync(p, 'utf8'));
+      if (info.version !== version) {
+        info.version = version;
+        writeFileSync(p, JSON.stringify(info, null, 2) + '\n');
+      }
+    },
+  };
+}
+
 export default defineConfig({
   // base: './' keeps every asset path relative, required for file:// in the .ipk.
   base: './',
-  plugins: [preact(), webosClassicScript()],
+  plugins: [preact(), webosClassicScript(), stampAppinfoVersion()],
   build: {
     // chrome58 keeps JS syntax compatible with webOS 5.0+ (Chromium 68); webOS
     // 6.x is Chromium 79. (CSS feature support is handled in global.css.)

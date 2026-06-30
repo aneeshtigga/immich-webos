@@ -144,6 +144,15 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     setTimeout(() => delete el.dataset.vkbReady, 0);
   };
 
+  // Fill the form with Immich's public demo server creds (demo.immich.app) so
+  // the app can be tried without a server of your own.
+  const fillDemo = () => {
+    setServer('https://demo.immich.app');
+    setEmail('demo@immich.app');
+    setPassword('demo');
+    setError('');
+  };
+
   // Set the server URL's scheme without losing whatever host the user typed.
   // Strips any existing scheme, then prefixes the chosen one.
   const setScheme = (scheme: 'http://' | 'https://') => {
@@ -253,6 +262,15 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           onKeyDown={onFieldKey}
         >
           {busy ? 'Signing in…' : 'Sign in'}
+        </button>
+        <button
+          data-focusable
+          type="button"
+          class="focusable btn-demo"
+          onClick={fillDemo}
+          onKeyDown={onFieldKey}
+        >
+          Use demo account
         </button>
         </form>
       </div>

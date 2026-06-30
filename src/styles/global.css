@@ -126,104 +126,55 @@ select {
   opacity: 0;
 }
 
-/* warm backwash radiating from center as the bulb ignites; background set inline (petal color) */
-.splash-warmth {
+/* flower fades in, then a band of light sweeps across the glass.
+   Sized to match splash.png (420px flower on a 1080-tall canvas = 38.9% of the
+   short side) so it doesn't jump size at the native splash -> web handoff. */
+.splash-orb {
+  position: relative;
+  z-index: 1;
+  width: 38.9vmin;
+  height: 38.9vmin;
+}
+.splash-orb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  animation: orb-fade 0.6s ease-out forwards;
+}
+@keyframes orb-fade {
+  to { opacity: 1; }
+}
+/* moving light bar, clipped to the flower silhouette (mask set inline) */
+.splash-sheen {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   left: 0;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  background-image: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, 0.9) 50%, transparent 58%);
+  background-repeat: no-repeat;
+  background-size: 220% 100%;
+  mix-blend-mode: screen;
   opacity: 0;
-  animation: orb-warmth 1.1s ease forwards;
-  pointer-events: none;
+  animation: sheen-sweep 2.8s ease-out 0.5s forwards;
 }
-@keyframes orb-warmth {
-  0%   { opacity: 0; }
-  38%  { opacity: 0; }
-  55%  { opacity: 1; }
-  100% { opacity: 0.55; }
+@keyframes sheen-sweep {
+  0%   { opacity: 0; background-position: 200% 0; }
+  12%  { opacity: 1; }
+  100% { opacity: 1; background-position: -90% 0; }
 }
 
-/* orb enters at 80% scale, settles with slight overshoot */
-.splash-orb {
-  position: relative;
-  z-index: 1;
-  animation: orb-entry 1.0s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes orb-entry {
-  0%   { transform: scale(0.8); }
-  55%  { transform: scale(1.04); }
-  100% { transform: scale(1); }
-}
-
-/* ambient blur glow — delayed, pours in after the flicker */
-.orb-glow {
-  opacity: 0;
-  animation: orb-glow-in 1.1s ease forwards;
-}
-@keyframes orb-glow-in {
-  0%   { opacity: 0; }
-  42%  { opacity: 0; }
-  80%  { opacity: 0.65; }
-  100% { opacity: 0.65; }
-}
-
-/* core — smooth ramp up */
-.orb-core {
-  opacity: 0;
-  animation: orb-core-on 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-@keyframes orb-core-on {
-  0%   { opacity: 0; }
-  100% { opacity: 1; }
-}
-
-/* glass ring — materialises as bulb brightens */
-.orb-ring {
-  opacity: 0;
-  animation: orb-ring-in 1.0s ease forwards;
-}
-@keyframes orb-ring-in {
-  0%   { opacity: 0; }
-  36%  { opacity: 0; }
-  80%  { opacity: 1; }
-  100% { opacity: 1; }
-}
-
-/* upper highlight — 0.55 final opacity */
-.orb-hi1 {
-  opacity: 0;
-  animation: orb-hi1-in 1.1s ease forwards;
-}
-@keyframes orb-hi1-in {
-  0%   { opacity: 0; }
-  38%  { opacity: 0; }
-  100% { opacity: 0.55; }
-}
-
-/* lower highlight — 0.45 final opacity */
-.orb-hi2 {
-  opacity: 0;
-  animation: orb-hi2-in 1.1s ease forwards;
-}
-@keyframes orb-hi2-in {
-  0%   { opacity: 0; }
-  38%  { opacity: 0; }
-  100% { opacity: 0.45; }
-}
-
-/* Logo picks up splash brand color via currentColor + CSS var */
+/* in-app logo mark — sized by caller (inline width/height or .login-logo) */
 .logo-orb {
-  color: var(--brand-color, #fff6eb);
-}
-.logo-glow {
-  fill: var(--brand-color, #fff6eb);
-  opacity: 0.65;
-}
-.logo-ring {
-  fill: transparent;
-  stroke: var(--brand-color, rgba(255,255,255,0.65));
-  opacity: 0.75;
+  display: block;
+  object-fit: contain;
 }
 
 /* ---------- Login ---------- */
@@ -459,6 +410,16 @@ select {
   background: var(--fg);
   color: #0a0a0a;
   margin-top: 10px;
+}
+.btn-demo {
+  font-family: 'Inter';
+  font-size: 22px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
 }
 .login-error {
   color: #ff6b6b;

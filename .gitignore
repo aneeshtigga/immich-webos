@@ -13,3 +13,4 @@ immich.png
 *.png
 !public/*.png
 !screenshots/*.png
+!src/assets/*.png
