@@ -6,6 +6,9 @@ out/
 *.log
 .vite/
 
+# local product doc, not shipped
+docs/PRD.md
+
 # dev screenshots
 image.png
 immich-webos.png
