@@ -36,6 +36,7 @@
         width: auto; margin-top: 0; flex: 1; font-family: inherit; font-size: 15px;
         padding: 10px; background: #18181b; color: #accbfa; border: 1px solid #232329;
       }
+      .mode-btn--on { border-color: #4250af; background: #1c1f3a; }
       .otp { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
       .otp-box {
         width: 100%; min-width: 0; margin-top: 0; text-align: center; padding: 12px 0;
@@ -75,10 +76,20 @@
           <button type="button" class="scheme-btn" data-scheme="http://">http://</button>
           <button type="button" class="scheme-btn" data-scheme="https://">https://</button>
         </div>
-        <label for="email">Email</label>
-        <input id="email" type="email" inputmode="email" autocomplete="username" required />
-        <label for="password">Password</label>
-        <input id="password" type="password" autocomplete="current-password" required />
+        <div class="scheme-row" id="modeRow">
+          <button type="button" class="scheme-btn mode-btn mode-btn--on" data-mode="password">Password</button>
+          <button type="button" class="scheme-btn mode-btn" data-mode="apikey">API key</button>
+        </div>
+        <div id="pwFields">
+          <label for="email">Email</label>
+          <input id="email" type="email" inputmode="email" autocomplete="username" />
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" />
+        </div>
+        <div id="keyField" style="display:none">
+          <label for="apikey">API key</label>
+          <input id="apikey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Settings → API Keys in Immich" />
+        </div>
         <button id="go" type="submit">Approve sign-in</button>
       </form>
       <div class="msg" id="msg"></div>
@@ -142,8 +153,29 @@
         boxes[0].focus();
       }
 
+      // Sign-in method toggle: Password (email + password) vs API key.
+      var mode = 'password';
+      var pwFields = document.getElementById('pwFields');
+      var keyField = document.getElementById('keyField');
+      var modeBtns = document.querySelectorAll('.mode-btn');
+      for (var m = 0; m < modeBtns.length; m++) {
+        modeBtns[m].addEventListener('click', function () {
+          mode = this.getAttribute('data-mode');
+          for (var j = 0; j < modeBtns.length; j++) {
+            modeBtns[j].className =
+              'scheme-btn mode-btn' +
+              (modeBtns[j].getAttribute('data-mode') === mode ? ' mode-btn--on' : '');
+          }
+          var key = mode === 'apikey';
+          pwFields.style.display = key ? 'none' : 'block';
+          keyField.style.display = key ? 'block' : 'none';
+          msg.className = 'msg';
+          msg.textContent = '';
+        });
+      }
+
       // Quick scheme buttons: swap/prepend the scheme, keep the typed host.
-      var schemeBtns = document.querySelectorAll('.scheme-btn');
+      var schemeBtns = document.querySelectorAll('.scheme-btn:not(.mode-btn)');
       for (var s = 0; s < schemeBtns.length; s++) {
         schemeBtns[s].addEventListener('click', function () {
           var scheme = this.getAttribute('data-scheme');
@@ -166,26 +198,38 @@
           return;
         }
 
+        var server = norm(document.getElementById('server').value);
+        var payload = { user_code: code, server_url: server };
+        if (mode === 'apikey') {
+          var apikey = document.getElementById('apikey').value.trim();
+          if (!apikey) {
+            msg.className = 'msg err';
+            msg.textContent = 'Enter your API key.';
+            return;
+          }
+          payload.api_key = apikey;
+        } else {
+          payload.email = document.getElementById('email').value.trim();
+          payload.password = document.getElementById('password').value;
+          if (!payload.email || !payload.password) {
+            msg.className = 'msg err';
+            msg.textContent = 'Enter your email and password.';
+            return;
+          }
+        }
+
         go.disabled = true;
         go.textContent = 'Signing in…';
 
-        var server = norm(document.getElementById('server').value);
-        var email = document.getElementById('email').value.trim();
-        var password = document.getElementById('password').value;
-
-        // Send credentials to the relay, which logs in to Immich server-side
-        // (browsers can't call Immich cross-origin unless it sends CORS headers,
-        // which many self-hosted instances don't). The relay uses the password
-        // for that one request and never stores it.
+        // Send credentials to the relay, which authenticates to Immich
+        // server-side (browsers can't call Immich cross-origin unless it sends
+        // CORS headers, which many self-hosted instances don't). A password is
+        // used for that one request and never stored; an API key is held only
+        // until the TV collects it.
         fetch('/approve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_code: code,
-            server_url: server,
-            email: email,
-            password: password,
-          }),
+          body: JSON.stringify(payload),
         })
           .catch(function () {
             throw new Error('Could not reach the pairing relay. Is it still running, and is your phone on the same network?');
@@ -195,10 +239,11 @@
             return r.json().then(function (b) {
               var m = {
                 invalid_credentials: 'Wrong email or password.',
+                invalid_api_key: 'Invalid API key.',
                 immich_unreachable: 'The relay could not reach Immich at ' + server + '. Check the server URL.',
                 immich_error: 'Immich returned an error. Check the server URL.',
                 invalid_user_code: 'This pairing code expired. Reopen the QR on your TV.',
-                invalid_request: 'Missing a field. Fill in all four.',
+                invalid_request: 'Missing a field. Fill in everything above.',
               };
               throw new Error(m[b.error] || ('Pairing failed (' + (b.error || r.status) + ').'));
             });

@@ -11,7 +11,7 @@
 // the cross-origin cookie auth path is unavailable. So we fetch them with the
 // Bearer header and turn the response into a blob: object URL (see media.ts).
 
-import { getServer, getToken } from '../auth/store';
+import { getServer, getAuthHeaders, getAuthQuery, getAuthKind } from '../auth/store';
 
 export interface LoginResponse {
   accessToken: string;
@@ -54,8 +54,7 @@ function base(): string {
 }
 
 function authHeaders(): Record<string, string> {
-  const t = getToken();
-  return t ? { Authorization: `Bearer ${t}` } : {};
+  return getAuthHeaders();
 }
 
 async function jsonReq<T>(path: string, init?: RequestInit): Promise<T> {
@@ -101,7 +100,34 @@ export async function login(
   return res.json() as Promise<LoginResponse>;
 }
 
+export interface ApiKeyUser {
+  userId: string;
+  name: string;
+  email: string;
+}
+
+// Validate a personal API key and resolve the owning user. There's no "login"
+// for API keys — the key IS the credential — so we probe GET /users/me with the
+// key as proof it works and to pull the display name/email for the session.
+export async function loginWithApiKey(
+  server: string,
+  key: string,
+): Promise<ApiKeyUser> {
+  // server passed explicitly because it isn't saved until validation succeeds
+  const res = await fetch(server + '/api/users/me', {
+    headers: { 'x-api-key': key },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new ApiError(res.status, body || res.statusText);
+  }
+  const u = (await res.json()) as { id: string; name: string; email: string };
+  return { userId: u.id, name: u.name, email: u.email };
+}
+
 export async function logout(): Promise<void> {
+  // API keys have no server-side session to invalidate; just drop it locally.
+  if (getAuthKind() === 'apikey') return;
   try {
     await jsonReq('/auth/logout', { method: 'POST' });
   } catch {
@@ -312,13 +338,11 @@ export function originalUrl(id: string): string {
 
 // Direct streaming URL (token in query). Used as a plain <video src>.
 export function videoStreamUrl(id: string): string {
-  const t = getToken();
-  const q = new URLSearchParams({ sessionKey: t || '' });
+  const q = new URLSearchParams(getAuthQuery());
   return `${base()}/assets/${id}/video/playback?${q.toString()}`;
 }
 
 export function originalStreamUrl(id: string): string {
-  const t = getToken();
-  const q = new URLSearchParams({ sessionKey: t || '' });
+  const q = new URLSearchParams(getAuthQuery());
   return `${base()}/assets/${id}/original?${q.toString()}`;
 }

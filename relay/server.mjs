@@ -26,8 +26,11 @@
 // ENDPOINTS
 //   POST /device_authorization      (TV)    -> device/user codes + URIs
 //   GET  /verify?user_code=...      (phone) -> verification page (static HTML)
-//   POST /approve                   (phone) -> { user_code, server_url, email, password }
-//                                              relay logs in to Immich, stores token
+//   POST /approve                   (phone) -> { user_code, server_url, email,
+//                                              password } OR { user_code,
+//                                              server_url, api_key } — relay
+//                                              authenticates to Immich, stores
+//                                              the session token or API key
 //   POST /token                     (TV)    -> pending | token | error  (RFC 8628 §3.4-3.5)
 //
 // Run: node relay/server.mjs   (PORT, CODE_TTL_SECONDS, POLL_INTERVAL env vars)
@@ -153,14 +156,38 @@ const server = createServer(async (req, res) => {
   // stores only the resulting token for the TV to collect. The password is used
   // for this one request and never stored or logged.
   if (req.method === 'POST' && path === '/approve') {
-    const { user_code, server_url, email, password } = await readJson(req);
-    if (!user_code || !server_url || !email || !password) {
+    const { user_code, server_url, email, password, api_key } = await readJson(req);
+    if (!user_code || !server_url || (!api_key && (!email || !password))) {
       return send(res, 400, { error: 'invalid_request' });
     }
     const rec = findByUserCode(user_code);
     if (!rec) return send(res, 404, { error: 'invalid_user_code' });
 
     const base = String(server_url).trim().replace(/\/+$/, '').replace(/\/api$/, '');
+
+    // API key path: the key IS the credential. Validate it with GET /users/me
+    // and store the key itself for the TV to use directly (x-api-key).
+    if (api_key) {
+      try {
+        const r = await fetch(base + '/api/users/me', {
+          headers: { 'x-api-key': api_key },
+        });
+        if (r.status === 401) return send(res, 401, { error: 'invalid_api_key' });
+        if (!r.ok) return send(res, 502, { error: 'immich_error', status: r.status });
+        const u = await r.json();
+        rec.approved = {
+          access_token: api_key,
+          auth_kind: 'apikey',
+          server_url: base,
+          user: { userId: u.id, name: u.name, email: u.email },
+        };
+      } catch {
+        return send(res, 502, { error: 'immich_unreachable' });
+      }
+      return send(res, 200, { ok: true });
+    }
+
+    // Password path: log in server-side, store the resulting session token.
     let loginRes;
     try {
       const r = await fetch(base + '/api/auth/login', {
@@ -177,6 +204,7 @@ const server = createServer(async (req, res) => {
 
     rec.approved = {
       access_token: loginRes.accessToken,
+      auth_kind: 'session',
       server_url: base,
       user: {
         userId: loginRes.userId,
@@ -200,6 +228,7 @@ const server = createServer(async (req, res) => {
     pending.delete(device_code);
     return send(res, 200, {
       access_token: rec.approved.access_token,
+      auth_kind: rec.approved.auth_kind || 'session',
       server_url: rec.approved.server_url,
       user: rec.approved.user,
     });

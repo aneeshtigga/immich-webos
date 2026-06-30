@@ -1,5 +1,5 @@
 // Fetch a binary endpoint with Bearer auth and return a blob: object URL.
-import { getToken } from '../auth/store';
+import { getAuthHeaders } from '../auth/store';
 
 // A hung fetch (TCP stall, silently-dropped connection — common over flaky TV
 // wifi to a self-hosted NAS) would otherwise never settle. media.ts gates
@@ -9,12 +9,11 @@ import { getToken } from '../auth/store';
 // request is bounded by an AbortController timeout: on timeout the fetch aborts,
 // the promise rejects, and the slot is freed for the next asset.
 export async function authedBlobUrl(url: string, timeoutMs = 20000): Promise<string> {
-  const t = getToken();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, {
-      headers: t ? { Authorization: `Bearer ${t}` } : {},
+      headers: getAuthHeaders(),
       signal: ctrl.signal,
     });
     if (!res.ok) throw new Error(`media ${res.status} for ${url}`);

@@ -386,6 +386,17 @@ select {
   color: var(--fg);
   cursor: pointer;
 }
+/* Login-method toggle (Password / API key). */
+.mode-row {
+  display: flex;
+}
+.mode-row > * + * {
+  margin-left: 10px;
+}
+.scheme-btn--on {
+  border-color: var(--immich-dark-primary);
+  background: rgba(var(--immich-primary-rgb, 66, 80, 175), 0.25);
+}
 .input:focus {
   border-color: var(--immich-dark-primary);
   background: rgba(10, 10, 10, 0.75);

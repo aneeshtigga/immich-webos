@@ -1,7 +1,13 @@
 import { useState, useRef, useEffect } from 'preact/hooks';
 import { ImmichLogo } from '../components/ImmichLogo';
-import { login } from '../api/client';
-import { getServer, saveSession, normalizeServer, getPairIssuer } from '../auth/store';
+import { login, loginWithApiKey } from '../api/client';
+import {
+  getServer,
+  saveSession,
+  saveApiKey,
+  normalizeServer,
+  getPairIssuer,
+} from '../auth/store';
 import { useRemote } from '../nav/useRemote';
 import { exitApp } from '../nav/exit';
 import { Key } from '../nav/keys';
@@ -21,6 +27,9 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   const [server, setServer] = useState(getServer());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  // 'password' = email + password login; 'apikey' = a personal API key.
+  const [mode, setMode] = useState<'password' | 'apikey'>('password');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -55,8 +64,13 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         setDevice(dc);
         const res = await pollUntilDone(issuer, dc, signal);
         if (signal.aborted) return;
-        // phone approved → token minted by the relay; log straight in.
-        saveSession(res.server_url, res.access_token, res.user);
+        // phone approved → credential minted by the relay; log straight in.
+        // Either a session token or a personal API key, per auth_kind.
+        if (res.auth_kind === 'apikey') {
+          saveApiKey(res.server_url, res.access_token, res.user);
+        } else {
+          saveSession(res.server_url, res.access_token, res.user);
+        }
         onLogin();
       } catch (e) {
         if (signal.aborted) return;
@@ -147,9 +161,15 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   // Fill the form with Immich's public demo server creds (demo.immich.app) so
   // the app can be tried without a server of your own.
   const fillDemo = () => {
+    setMode('password');
     setServer('https://demo.immich.app');
     setEmail('demo@immich.app');
     setPassword('demo');
+    setError('');
+  };
+
+  const switchMode = (m: 'password' | 'apikey') => {
+    setMode(m);
     setError('');
   };
 
@@ -166,18 +186,25 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     setBusy(true);
     try {
       const srv = normalizeServer(server);
-      const res = await login(srv, email.trim(), password);
-      saveSession(srv, res.accessToken, {
-        userId: res.userId,
-        name: res.name,
-        email: res.userEmail,
-      });
+      if (mode === 'apikey') {
+        const user = await loginWithApiKey(srv, apiKey.trim());
+        saveApiKey(srv, apiKey.trim(), user);
+      } else {
+        const res = await login(srv, email.trim(), password);
+        saveSession(srv, res.accessToken, {
+          userId: res.userId,
+          name: res.name,
+          email: res.userEmail,
+        });
+      }
       onLogin();
     } catch (err: any) {
       const status = err?.status;
+      const badCreds =
+        mode === 'apikey' ? 'Invalid API key.' : 'Wrong email or password.';
       setError(
         status === 401
-          ? 'Wrong email or password.'
+          ? badCreds
           : `Could not reach server. Check the URL and that the TV is on the same network. (${err?.message || 'network error'})`,
       );
     } finally {
@@ -229,30 +256,68 @@ export function Login({ onLogin }: { onLogin: () => void }) {
             </button>
           </div>
         </label>
-        <label class="field">
-          <span>Email</span>
-          <input
+        <div class="mode-row">
+          <button
+            type="button"
             data-focusable
-            class="focusable input"
-            type="email"
-            value={email}
-            onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+            class={'focusable scheme-btn' + (mode === 'password' ? ' scheme-btn--on' : '')}
+            onClick={() => switchMode('password')}
             onKeyDown={onFieldKey}
-            onFocus={onFieldFocus}
-          />
-        </label>
-        <label class="field">
-          <span>Password</span>
-          <input
+          >
+            Password
+          </button>
+          <button
+            type="button"
             data-focusable
-            class="focusable input"
-            type="password"
-            value={password}
-            onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+            class={'focusable scheme-btn' + (mode === 'apikey' ? ' scheme-btn--on' : '')}
+            onClick={() => switchMode('apikey')}
             onKeyDown={onFieldKey}
-            onFocus={onFieldFocus}
-          />
-        </label>
+          >
+            API key
+          </button>
+        </div>
+        {mode === 'password' ? (
+          <>
+            <label class="field">
+              <span>Email</span>
+              <input
+                data-focusable
+                class="focusable input"
+                type="email"
+                value={email}
+                onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+                onKeyDown={onFieldKey}
+                onFocus={onFieldFocus}
+              />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input
+                data-focusable
+                class="focusable input"
+                type="password"
+                value={password}
+                onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+                onKeyDown={onFieldKey}
+                onFocus={onFieldFocus}
+              />
+            </label>
+          </>
+        ) : (
+          <label class="field">
+            <span>API key</span>
+            <input
+              data-focusable
+              class="focusable input"
+              type="text"
+              value={apiKey}
+              placeholder="Settings → API Keys in Immich"
+              onInput={(e) => setApiKey((e.target as HTMLInputElement).value)}
+              onKeyDown={onFieldKey}
+              onFocus={onFieldFocus}
+            />
+          </label>
+        )}
         {error && <div class="login-error">{error}</div>}
         <button
           data-focusable

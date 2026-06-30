@@ -29,6 +29,9 @@ export interface DeviceCodeResponse {
 
 export interface DeviceTokenSuccess {
   access_token: string;
+  // How access_token authenticates: 'session' = login token (Bearer), 'apikey'
+  // = a personal API key (x-api-key). Older relays omit it; treat as 'session'.
+  auth_kind?: 'session' | 'apikey';
   server_url: string;
   user: { userId: string; name: string; email: string };
 }

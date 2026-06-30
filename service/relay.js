@@ -132,6 +132,41 @@ function postJson(target, bodyObj, cb) {
   req.end();
 }
 
+// Minimal JSON GET with custom headers (used to validate an API key against
+// GET /users/me). Same self-signed-cert tolerance as postJson.
+function getJson(target, headers, cb) {
+  var u = urlmod.parse(target);
+  var isHttps = u.protocol === 'https:';
+  var lib = isHttps ? https : http;
+  var opts = {
+    hostname: u.hostname,
+    port: u.port || (isHttps ? 443 : 80),
+    path: u.path,
+    method: 'GET',
+    headers: headers || {},
+  };
+  if (isHttps) opts.rejectUnauthorized = false;
+  var req = lib.request(opts, function (res) {
+    var chunks = '';
+    res.on('data', function (c) {
+      chunks += c;
+    });
+    res.on('end', function () {
+      var json = null;
+      try {
+        json = JSON.parse(chunks || '{}');
+      } catch (e) {
+        json = {};
+      }
+      cb(null, res.statusCode, json);
+    });
+  });
+  req.on('error', function (err) {
+    cb(err);
+  });
+  req.end();
+}
+
 function sendJson(res, status, obj) {
   var body = JSON.stringify(obj);
   res.writeHead(status, {
@@ -200,19 +235,40 @@ function handle(req, res) {
       var server_url = body.server_url;
       var email = body.email;
       var password = body.password;
-      if (!user_code || !server_url || !email || !password) {
+      var api_key = body.api_key;
+      if (!user_code || !server_url || (!api_key && (!email || !password))) {
         return sendJson(res, 400, { error: 'invalid_request' });
       }
       var rec = findByUserCode(user_code);
       if (!rec) return sendJson(res, 404, { error: 'invalid_user_code' });
 
       var base = String(server_url).trim().replace(/\/+$/, '').replace(/\/api$/, '');
+
+      // API key path: validate via GET /users/me, store the key itself for the
+      // TV to use directly (x-api-key).
+      if (api_key) {
+        return getJson(base + '/api/users/me', { 'x-api-key': api_key }, function (err, status, u) {
+          if (err) return sendJson(res, 502, { error: 'immich_unreachable' });
+          if (status === 401) return sendJson(res, 401, { error: 'invalid_api_key' });
+          if (status < 200 || status >= 300) return sendJson(res, 502, { error: 'immich_error', status: status });
+          rec.approved = {
+            access_token: api_key,
+            auth_kind: 'apikey',
+            server_url: base,
+            user: { userId: u.id, name: u.name, email: u.email },
+          };
+          return sendJson(res, 200, { ok: true });
+        });
+      }
+
+      // Password path: log in server-side, store the resulting session token.
       postJson(base + '/api/auth/login', { email: email, password: password }, function (err, status, json) {
         if (err) return sendJson(res, 502, { error: 'immich_unreachable' });
         if (status === 401) return sendJson(res, 401, { error: 'invalid_credentials' });
         if (status < 200 || status >= 300) return sendJson(res, 502, { error: 'immich_error', status: status });
         rec.approved = {
           access_token: json.accessToken,
+          auth_kind: 'session',
           server_url: base,
           user: { userId: json.userId, name: json.name, email: json.userEmail },
         };
@@ -233,6 +289,7 @@ function handle(req, res) {
       delete pending[body.device_code]; // single-use
       return sendJson(res, 200, {
         access_token: rec.approved.access_token,
+        auth_kind: rec.approved.auth_kind || 'session',
         server_url: rec.approved.server_url,
         user: rec.approved.user,
       });
