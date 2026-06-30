@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import logoUrl from '../assets/logo.png';
+import logoUrl from '../assets/logo.webp';
 import edgesUrl from '../assets/logo-edges.png';
 
 export function Splash({ onDone }: { onDone: () => void }) {
