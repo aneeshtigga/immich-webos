@@ -665,11 +665,15 @@ select {
   color: var(--fg);
 }
 .jrow-wrap {
-  margin-bottom: 10px;
+  /* match the 6px column gap (GRID_GAP) so same-date rows are evenly spaced */
+  margin-bottom: 6px;
 }
 .jrow-header {
   position: relative;
   height: 32px;
+  /* extra space above a new date's label so sections separate, while same-date
+     rows keep the tight 6px gap */
+  margin-top: 14px;
   margin-bottom: 4px;
 }
 .day-label {
@@ -855,6 +859,11 @@ select {
 }
 .search-view .grid-scroll {
   flex: 1;
+}
+/* Search renders bare .jrow rows (no .jrow-wrap, which carries the timeline's
+   row spacing), so restore the vertical gap that .jrow used to have. */
+.search-view .jrow {
+  margin-bottom: 6px;
 }
 
 /* ----- Search browse: People + Places ----- */
