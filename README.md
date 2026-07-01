@@ -7,7 +7,7 @@
 
 A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch. Built with [Preact](https://preactjs.com/) + [Vite](https://vitejs.dev/), driven entirely by the LG remote.
 
-> Unofficial — "Immich" and its logo belong to the [Immich project](https://immich.app).
+> Unofficial, community-built app — not affiliated with the [Immich project](https://immich.app). "Immich" is a trademark of its owners.
 
 [![Download latest .ipk](https://img.shields.io/github/v/release/aneeshtigga/immich-webos?label=Download%20.ipk&logo=lg&style=for-the-badge)](https://github.com/aneeshtigga/immich-webos/releases/latest/download/com.immich.webos.ipk)
 
@@ -155,8 +155,8 @@ src/
   components/  Focusable primitives, photo grid, sidebar, QR code, icons
   nav/         remote key codes, spatial focus, back/exit handling
   views/       Login, Home, Albums, Search, Fullscreen
-  assets/      login background
-  fonts/       bundled Inter (Latin woff2)
+  assets/      login background + app logo
+  fonts/       bundled Inter + DM Sans (Latin woff2)
 service/       on-device pairing relay (webOS JS service, packaged in the .ipk)
 relay/         reference external relay + RFC 8628 proposal for Immich
 public/        appinfo.json + icons/splash for the webOS package
