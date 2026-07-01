@@ -42,8 +42,31 @@ jobs:
           mkdir -p release
           cp out/*.ipk release/com.immich.webos.ipk
 
+      - name: Generate webosbrew manifest
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          SHA256=$(sha256sum release/com.immich.webos.ipk | cut -d' ' -f1)
+          cat > release/com.immich.webos.manifest.json <<EOF
+          {
+            "id": "com.immich.webos",
+            "version": "$VERSION",
+            "type": "web",
+            "title": "Immich",
+            "appDescription": "Browse your self-hosted Immich photo and video library on webOS TV.",
+            "iconUri": "https://raw.githubusercontent.com/$REPO/main/public/largeIcon.png",
+            "sourceUrl": "https://github.com/$REPO",
+            "rootRequired": false,
+            "ipkUrl": "com.immich.webos.ipk",
+            "ipkHash": { "sha256": "$SHA256" }
+          }
+          EOF
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/com.immich.webos.ipk
+          files: |
+            release/com.immich.webos.ipk
+            release/com.immich.webos.manifest.json
           generate_release_notes: true
