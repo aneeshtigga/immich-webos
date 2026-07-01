@@ -11,14 +11,27 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 
 [![Download latest .ipk](https://img.shields.io/github/v/release/aneeshtigga/immich-webos?label=Download%20.ipk&logo=lg&style=for-the-badge)](https://github.com/aneeshtigga/immich-webos/releases/latest/download/com.immich.webos.ipk)
 
-## Features
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="screenshots/specs_dark2.png" />
+    <img src="screenshots/specs_light.png" alt="immich webOS — features overview" width="100%" />
+  </picture>
+</p>
 
-- Log in with email + password, or **scan a QR code with your phone**
-- Browse your timeline in a justified, day-grouped photo grid
-- Browse albums
-- Search by text, plus browse **People** (faces) and **Places** (cities)
-- Full-screen photo/video viewer with remote playback controls
-- D-pad spatial navigation tuned for the 10-foot experience
+## Requirements
+
+- An [Immich](https://immich.app/) server you can reach from the TV
+- Node.js 18+
+- An LG webOS TV (webOS 5.0+ / Chromium 68+) in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app), or the webOS emulator
+- [`@webos-tools/cli`](https://www.npmjs.com/package/@webos-tools/cli) (installed as a dev dependency) for packaging and deploy
+
+## Install from a release
+
+Grab the latest `com.immich.webos.ipk` from the [releases page](https://github.com/aneeshtigga/immich-webos/releases/latest) (or the button above), then sideload it onto a TV in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app):
+
+```bash
+ares-install --device <your-device> com.immich.webos.ipk
+```
 
 ## Screenshots
 
@@ -50,21 +63,6 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 </table>
 
 > Screenshots use the public Immich [demo server](https://demo.immich.app).
-
-## Requirements
-
-- An [Immich](https://immich.app/) server you can reach from the TV
-- Node.js 18+
-- An LG webOS TV (webOS 5.0+ / Chromium 68+) in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app), or the webOS emulator
-- [`@webos-tools/cli`](https://www.npmjs.com/package/@webos-tools/cli) (installed as a dev dependency) for packaging and deploy
-
-## Install from a release
-
-Grab the latest `com.immich.webos.ipk` from the [releases page](https://github.com/aneeshtigga/immich-webos/releases/latest) (or the button above), then sideload it onto a TV in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app):
-
-```bash
-ares-install --device <your-device> com.immich.webos.ipk
-```
 
 ## Sign in with your phone (QR)
 
