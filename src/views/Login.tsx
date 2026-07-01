@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'preact/hooks';
 import { ImmichLogo } from '../components/ImmichLogo';
+import { Icon } from '../components/Icon';
 import { login, loginWithApiKey } from '../api/client';
 import {
   getServer,
@@ -222,6 +223,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           </div>
         </div>
         <h1 class="login-heading">Sign in to your server</h1>
+        <p class="login-sub">Choose how you'd like to connect to your Immich server.</p>
         <form ref={formRef} class="login-form" onSubmit={submit}>
         <label class="field">
           <span>Server URL</span>
@@ -256,24 +258,26 @@ export function Login({ onLogin }: { onLogin: () => void }) {
             </button>
           </div>
         </label>
-        <div class="mode-row">
+        <div class="mode-toggle">
           <button
             type="button"
             data-focusable
-            class={'focusable scheme-btn' + (mode === 'password' ? ' scheme-btn--on' : '')}
+            class={'focusable mode-toggle-btn' + (mode === 'password' ? ' mode-toggle-btn--on' : '')}
             onClick={() => switchMode('password')}
             onKeyDown={onFieldKey}
           >
-            Password
+            <Icon name="account" size={26} />
+            <span>Email &amp; Password</span>
           </button>
           <button
             type="button"
             data-focusable
-            class={'focusable scheme-btn' + (mode === 'apikey' ? ' scheme-btn--on' : '')}
+            class={'focusable mode-toggle-btn' + (mode === 'apikey' ? ' mode-toggle-btn--on' : '')}
             onClick={() => switchMode('apikey')}
             onKeyDown={onFieldKey}
           >
-            API key
+            <Icon name="key" size={26} />
+            <span>API Key</span>
           </button>
         </div>
         {mode === 'password' ? (

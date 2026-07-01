@@ -280,8 +280,14 @@ select {
 .login-heading {
   font-size: 4.4vmin;
   font-weight: 700;
-  margin: 0 0 4vmin;
+  margin: 0 0 1.4vmin;
   color: var(--fg);
+}
+.login-sub {
+  font-size: 2.6vmin;
+  color: var(--muted);
+  margin: 0 0 2.6vmin;
+  line-height: 1.4;
 }
 .login-form {
   width: 100%;
@@ -289,7 +295,12 @@ select {
   flex-direction: column;
 }
 .login-form > * + * {
-  margin-top: 2.4vmin;
+  margin-top: 2vmin;
+}
+/* Slimmer focus ring on the login — its controls are smaller than the grid
+   thumbnails, so the default 3px ring looks heavy here. */
+.login .focusable:focus {
+  box-shadow: 0 0 0 2px var(--focus);
 }
 
 /* Right panel — big QR + scan/code captions, centered */
@@ -346,21 +357,24 @@ select {
   position: static;
   margin: 11vmin auto;
 }
+/* Form controls scale in vmin like the rest of the login (heading/QR), so the
+   layout stays proportionate at any viewport instead of fixed px dwarfing the
+   vmin siblings. */
 .field {
   display: flex;
   flex-direction: column;
-  font-size: 24px;
+  font-size: 1.8vmin;
   color: var(--fg);
 }
 .field > * + * {
-  margin-top: 10px;
+  margin-top: 0.8vmin;
 }
 /* Translucent frosted controls so they sit on the artwork instead of looking
    like opaque cut-out boxes against it. */
 .input {
-  font-size: 28px;
-  padding: 18px 22px;
-  border-radius: 12px;
+  font-size: 2.1vmin;
+  padding: 1.35vmin 1.7vmin;
+  border-radius: 1vmin;
   border: 2px solid rgba(255, 255, 255, 0.18);
   background: rgba(10, 10, 10, 0.75);
   color: var(--fg);
@@ -371,27 +385,54 @@ select {
 /* quick scheme-prefix buttons under the Server URL field */
 .scheme-row {
   display: flex;
-  margin-top: 4px;
+  margin-top: 0.4vmin;
 }
 .scheme-row > * + * {
-  margin-left: 10px;
+  margin-left: 0.9vmin;
 }
 .scheme-btn {
   font-family: 'Inter';
-  font-size: 20px;
-  padding: 10px 22px;
-  border-radius: 10px;
+  font-size: 1.7vmin;
+  padding: 0.8vmin 1.6vmin;
+  border-radius: 0.9vmin;
   border: 2px solid rgba(255, 255, 255, 0.18);
   background: rgba(10, 10, 10, 0.75);
   color: var(--fg);
   cursor: pointer;
 }
-/* Login-method toggle (Password / API key). */
-.mode-row {
+/* Login-method toggle (Email & Password / API key) — segmented control. */
+.mode-toggle {
   display: flex;
+  gap: 0.6vmin;
+  padding: 0.6vmin;
+  border-radius: 1.2vmin;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 10, 10, 0.6);
 }
-.mode-row > * + * {
-  margin-left: 10px;
+.mode-toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8vmin;
+  padding: 1.25vmin 1.4vmin;
+  border: none;
+  border-radius: 0.9vmin;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Inter';
+  font-size: 1.8vmin;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mode-toggle-btn svg {
+  width: 2.1vmin;
+  height: 2.1vmin;
+}
+.mode-toggle-btn--on {
+  background: rgba(var(--immich-primary-rgb, 66, 80, 175), 0.35);
+  color: var(--immich-dark-primary);
 }
 .scheme-btn--on {
   border-color: var(--immich-dark-primary);
@@ -406,7 +447,7 @@ select {
 .input:-webkit-autofill,
 .input:-webkit-autofill:hover,
 .input:-webkit-autofill:focus {
-  font-size: 25px !important;
+  font-size: 2.1vmin !important;
   -webkit-text-fill-color: var(--fg);
   caret-color: var(--fg);
   -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
@@ -414,19 +455,19 @@ select {
   transition: background-color 9999s ease-in-out 0s;
 }
 .btn-primary {
-  font-size: 28px;
-  padding: 18px;
-  border-radius: 12px;
+  font-size: 2.1vmin;
+  padding: 1.35vmin;
+  border-radius: 1vmin;
   border: none;
   background: var(--fg);
   color: #0a0a0a;
-  margin-top: 10px;
+  margin-top: 0.7vmin;
 }
 .btn-demo {
   font-family: 'Inter';
-  font-size: 22px;
-  padding: 14px;
-  border-radius: 12px;
+  font-size: 1.75vmin;
+  padding: 1.1vmin;
+  border-radius: 0.9vmin;
   border: 2px solid rgba(255, 255, 255, 0.18);
   background: transparent;
   color: var(--fg);
@@ -434,7 +475,7 @@ select {
 }
 .login-error {
   color: #ff6b6b;
-  font-size: 19px;
+  font-size: 1.65vmin;
 }
 
 /* ---------- Shell ---------- */
