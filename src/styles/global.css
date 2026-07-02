@@ -510,7 +510,33 @@ select {
 }
 .rail.open {
   width: 300px;
+}
+/* Baked shadow layer (see Sidebar.tsx). Sits behind the rail at the OPEN
+   geometry always, so its 32px blur is rasterized ONCE into its own layer; only
+   its opacity animates — a pure compositor op, like LG's native shadow. No
+   per-frame blur repaint as the card grows (the old chop). */
+.rail-shadow {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  bottom: 14px;
+  width: 300px;
+  border-radius: 20px;
+  z-index: 5; /* just under the rail (6) */
   box-shadow: 8px 0 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+  /* Closing: fade out immediately (no delay) so the shadow never lingers over
+     the shrinking card. */
+  transition: opacity 0.12s ease;
+}
+.rail-shadow.open {
+  opacity: 1;
+  /* Opening: hold at 0 until the width grow (0.2s) is done, THEN fade in slowly
+     so it eases in rather than popping. Delay = width duration; asymmetric
+     (only on .open) so closing still hides it immediately. */
+  transition: opacity 0.35s ease 0.2s;
 }
 /* Warm-up frame (see Sidebar.tsx): paint the open-width card + shadow into the
    GPU cache invisibly, no transition, so the first real open has no cold hitch. */
@@ -532,6 +558,11 @@ select {
   display: flex;
   flex-direction: column;
   padding: 18px 0;
+  /* Own compositor layer: rasterized once (the warm-up primes it), so growing
+     the card's width just composites more of this existing texture instead of
+     repainting the revealed content each frame — the reveal becomes GPU-only. */
+  will-change: transform;
+  transform: translateZ(0);
 }
 .rail-brand {
   display: flex;
@@ -775,8 +806,8 @@ select {
 .thumb-ph {
   width: 100%;
   height: 100%;
-  /* flat solid tint set inline per-asset (Thumb.phColor) — cheapest paint on
-     the TV; no gradient/shimmer. */
+  /* neutral grey (inherits .thumb's --surface-2) until the thumbnail loads —
+     cheapest paint on the TV; no gradient/shimmer/decode. */
 }
 .bucket-ph {
   width: 100%;
@@ -1091,10 +1122,12 @@ select {
 }
 .fs-img,
 .fs-video {
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
+  /* fill the container and scale UP to it; contain preserves aspect (no crop).
+     width/height auto would cap at the image's intrinsic px (~1440), leaving the
+     preview small and centered on a 4K TV while the upscaled thumb placeholder
+     fills the screen — the "shrink on load" jump. */
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 /* thumbnail placeholder shown while the full preview fetches. position:absolute
@@ -1304,3 +1337,4 @@ select {
   width: 0;
   height: 0;
 }
+

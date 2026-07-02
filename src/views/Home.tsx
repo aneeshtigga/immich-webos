@@ -17,7 +17,7 @@ import { Albums } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
 import { useRemote } from '../nav/useRemote';
-import { setRoot, focusables, focus } from '../nav/focus';
+import { setRoot, focusables, focus, elementInViewport, focusVisibleContent } from '../nav/focus';
 import { exitApp } from '../nav/exit';
 
 interface Viewer {
@@ -70,8 +70,11 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     setSidebarOpen(false);
     setTimeout(() => {
       const el = lastContentFocus.current;
-      if (el && el.isConnected && el.offsetParent !== null) focus(el);
-      else focusFirstContent();
+      // If the remembered thumb is still on screen, restore it. If the user
+      // scrolled it out of view before opening the sidebar, don't yank the grid
+      // back to it — focus a thumb in the current viewport instead.
+      if (el && el.isConnected && el.offsetParent !== null && elementInViewport(el)) focus(el, true);
+      else if (!focusVisibleContent()) focusFirstContent();
     }, 0);
   };
 

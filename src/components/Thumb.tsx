@@ -23,7 +23,14 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    thumbObserver.observe(el, () => {
+    // Load once when the cell enters the 2-page window, then stop observing and
+    // keep the src for the life of the component. We deliberately do NOT drop it
+    // when it scrolls away: a loaded thumb then goes static (no fetch/decode/
+    // setState on further scroll), so revisiting is free. Dropping it forced a
+    // reload/re-decode on scroll-back — the "thumbnails reloading" churn. RAM is
+    // not the constraint here (measured ~10MB heap); the media LRU caps blobs.
+    thumbObserver.observe(el, (inside) => {
+      if (!inside) return;
       setNear(true);
       thumbObserver.unobserve(el);
     });
@@ -64,9 +71,15 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
       onClick={onSelect}
     >
       {src ? (
-        <img class="thumb-img" src={src} loading="lazy" />
+        // No loading="lazy": we already gate the fetch via IntersectionObserver
+        // (setNear), and native lazy-loading additionally lets the browser drop
+        // off-screen images and re-decode them on scroll-back — the placeholder→
+        // image flash on already-visited rows. decoding="async" keeps the decode
+        // off the scroll frame.
+        <img class="thumb-img" src={src} decoding="async" />
       ) : (
-        <div class="thumb-ph" style={{ background: phColor(assetId) }} />
+        // Neutral grey cell until the thumbnail loads.
+        <div class="thumb-ph" />
       )}
       {isVideo && (
         <span class="thumb-badge">
@@ -76,19 +89,6 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
       )}
     </button>
   );
-}
-
-// Flat random-ish placeholder tint, derived deterministically from the asset id
-// so a given cell keeps the same color across re-renders (no flicker) without
-// storing anything. A plain solid fill is the cheapest thing the TV GPU can
-// paint — no gradient, no shimmer animation, no need to match the image's
-// aspect ratio (the cell is already sized by the justified layout). Dark, low
-// saturation so the grid reads as quiet placeholders, not a confetti wall.
-function phColor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  const hue = Math.abs(h) % 360;
-  return `hsl(${hue}, 14%, 16%)`;
 }
 
 function formatDuration(d?: number | string | null): string {

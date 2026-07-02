@@ -4,39 +4,67 @@
 // real source of scroll jank on the TV's browser. Instead we keep ONE observer
 // per rootMargin and route callbacks through a WeakMap keyed by element.
 
-type Cb = () => void;
+// cb receives whether the element is currently inside the (margin-expanded)
+// root; callers act on `inside === true` (load the thumb / the bucket).
+type Cb = (inside: boolean) => void;
 
-function makeObserver(rootMargin: string) {
-  const cbs = new WeakMap<Element, Cb>();
+interface Pool {
+  observe(el: Element, cb: Cb): void;
+  unobserve(el: Element): void;
+  setRoot(root: Element | null): void;
+}
+
+// Every pool, so setLazyRoot can retarget them all at once.
+const pools: Pool[] = [];
+
+function makeObserver(rootMargin: string): Pool {
+  // Strong Map (not WeakMap) so setRoot can re-observe the live set after
+  // rebuilding the IO on a root change. Callers always unobserve on unmount /
+  // after load, so entries don't leak.
+  const cbs = new Map<Element, Cb>();
   let io: IntersectionObserver | null = null;
+  let root: Element | null = null;
 
-  const get = (): IntersectionObserver => {
-    if (!io) {
-      io = new IntersectionObserver(
-        (entries) => {
-          for (const e of entries) {
-            if (e.isIntersecting) {
-              const cb = cbs.get(e.target);
-              if (cb) cb();
-            }
-          }
-        },
-        { rootMargin },
-      );
+  const handler: IntersectionObserverCallback = (entries) => {
+    for (const e of entries) {
+      const cb = cbs.get(e.target);
+      if (cb) cb(e.isIntersecting);
     }
-    return io;
   };
+  const build = () => new IntersectionObserver(handler, { root, rootMargin });
 
-  return {
-    observe(el: Element, cb: Cb): void {
+  const pool: Pool = {
+    observe(el, cb) {
       cbs.set(el, cb);
-      get().observe(el);
+      if (!io) io = build();
+      io.observe(el);
     },
-    unobserve(el: Element): void {
+    unobserve(el) {
       cbs.delete(el);
       io?.unobserve(el);
     },
+    // Rebuild against a new root and re-observe everything currently tracked.
+    // rootMargin only extends the ROOT box; an intermediate scroll container
+    // still clips the intersection, so with the implicit viewport root a thumb
+    // below the grid's scroller is clipped out and only loads once it touches
+    // the viewport. Pointing root at the scroller makes the margin apply.
+    setRoot(r) {
+      if (r === root) return;
+      root = r;
+      if (!io) return;
+      io.disconnect();
+      io = build();
+      for (const el of cbs.keys()) io.observe(el);
+    },
   };
+  pools.push(pool);
+  return pool;
+}
+
+// Point the lazy observers at the actual scroll container (the grid's scroller).
+// Called by the grid on mount; reset to null (viewport) on unmount.
+export function setLazyRoot(root: Element | null): void {
+  for (const p of pools) p.setRoot(root);
 }
 
 // Prefetch window, sized in viewport heights ("pages") so it tracks the screen.

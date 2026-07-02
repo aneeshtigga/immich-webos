@@ -104,6 +104,11 @@ export function Sidebar({ open, active, userName, onNavigate, onLogout }: Props)
     : { tabIndex: -1 };
 
   return (
+    <>
+    {/* Shadow on its OWN layer, fixed at the open geometry, opacity-faded — like
+        LG's native UI bakes its shadow and alpha-composites it. Kept a sibling
+        (not inside .rail) because the rail's overflow:hidden would clip it. */}
+    <div class={'rail-shadow' + (open ? ' open' : '')} aria-hidden="true" />
     <aside
       class={'rail ' + (railOpen ? 'open ' : '') + (priming ? 'priming' : '')}
     >
@@ -154,5 +159,6 @@ export function Sidebar({ open, active, userName, onNavigate, onLogout }: Props)
         </div>
       </div>
     </aside>
+    </>
   );
 }

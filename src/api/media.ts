@@ -9,7 +9,12 @@
 import { authedBlobUrl } from './internal-fetch';
 import { thumbnailUrl, personThumbnailUrl } from './client';
 
-const MAX_THUMBS = 300; // ~ a few screens of grid; tune for TV RAM
+// Sized to cover the ~6-page retention window (keepObserver) both directions so
+// scrolling back over recently-seen thumbs is a cache hit, never a refetch. Blobs
+// are small webp (~tens of KB); decoded bitmaps are freed when a Thumb drops its
+// <img>, so this bounds byte cost, not decode memory. Raised from 300 with the
+// wider retention band (TV heap has headroom).
+const MAX_THUMBS = 800;
 const cache = new Map<string, string>(); // assetId -> object URL (insertion order = LRU)
 const inflight = new Map<string, Promise<string>>();
 

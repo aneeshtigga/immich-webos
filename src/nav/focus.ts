@@ -60,6 +60,54 @@ function visible(el: HTMLElement): boolean {
   return el.offsetParent !== null;
 }
 
+type Rect = { top: number; bottom: number; left: number; right: number };
+const windowVp = (): Rect => ({ top: 0, left: 0, bottom: window.innerHeight, right: window.innerWidth });
+
+// Whether el's box intersects the given viewport rect (client coords).
+function intersectsViewport(el: HTMLElement, vp: Rect): boolean {
+  const r = el.getBoundingClientRect();
+  return r.bottom > vp.top && r.top < vp.bottom && r.right > vp.left && r.left < vp.right;
+}
+
+// The focusable the user is looking at inside `vp`, in the given zone
+// (sidebar vs content): the element at the viewport centre, else the first
+// focusable intersecting the viewport. Used to keep focus where the grid is
+// currently scrolled instead of yanking it back to an off-screen element.
+function bestInViewport(zoneSidebar: boolean, vp: Rect): HTMLElement | null {
+  const cx = (vp.left + vp.right) / 2;
+  const cy = (vp.top + vp.bottom) / 2;
+  let hit = document.elementFromPoint(cx, cy) as HTMLElement | null;
+  while (hit && hit !== document.body && !hit.hasAttribute('data-focusable')) {
+    hit = hit.parentElement;
+  }
+  if (hit && hit.hasAttribute('data-focusable') && hit.hasAttribute('data-sidebar') === zoneSidebar && visible(hit)) {
+    return hit;
+  }
+  return (
+    rawList().find(
+      (e) => visible(e) && e.hasAttribute('data-sidebar') === zoneSidebar && intersectsViewport(e, vp),
+    ) || null
+  );
+}
+
+// Public: is el currently within the window viewport?
+export function elementInViewport(el: HTMLElement): boolean {
+  return intersectsViewport(el, windowVp());
+}
+
+// Public: focus a content (non-sidebar) thumbnail currently on screen, without
+// scrolling. Returns false if none is visible (caller falls back). Used when
+// returning to the grid after the previously-focused thumb was scrolled away —
+// staying put beats jumping back to the off-screen focus.
+export function focusVisibleContent(): boolean {
+  const el = bestInViewport(false, windowVp());
+  if (el) {
+    focus(el, true);
+    return true;
+  }
+  return false;
+}
+
 // Public: visible focusables. Used by views for initial-focus logic. Kept as a
 // fresh filtered view; callers invoke it rarely (mount / edge), not per-keypress.
 export function focusables(): HTMLElement[] {
@@ -120,10 +168,31 @@ const SNAP = 0.5; // px: close enough → finish and stop the loop
 interface AxisAnim {
   sc: HTMLElement | null;
   target: number;
+  // last scroll value WE wrote (via the glide or an instant jump). A scroll
+  // event landing on a different value means the user scrolled manually, so the
+  // glide baseline is stale and must be dropped — otherwise the next d-pad
+  // press eases from the pre-scroll target and rubberbands back to it.
+  last: number;
 }
-const animY: AxisAnim = { sc: null, target: 0 };
-const animX: AxisAnim = { sc: null, target: 0 };
+const animY: AxisAnim = { sc: null, target: 0, last: 0 };
+const animX: AxisAnim = { sc: null, target: 0, last: 0 };
 let animRaf = 0;
+
+// Bind a one-time scroll listener that cancels the glide on this axis when the
+// scroller moves to a position we didn't write (manual pointer/wheel scroll).
+// Dropping anim.sc makes the next retarget() base off the LIVE scrollTop.
+function bindScrollCancel(sc: HTMLElement, a: AxisAnim, prop: 'scrollTop' | 'scrollLeft'): void {
+  const flag = prop === 'scrollTop' ? 'navCancelY' : 'navCancelX';
+  if (sc.dataset[flag]) return;
+  sc.dataset[flag] = '1';
+  sc.addEventListener(
+    'scroll',
+    () => {
+      if (a.sc === sc && Math.abs(sc[prop] - a.last) > 2) a.sc = null;
+    },
+    { passive: true },
+  );
+}
 
 // Compute the desired absolute scroll position to bring `el` inside the safe
 // zone, set it as the animation target per axis, and ensure the loop runs.
@@ -149,9 +218,11 @@ function retarget(el: HTMLElement, instant = false): void {
     if (er.top - pend < cr.top + margin) d = er.top - pend - (cr.top + margin);
     else if (er.bottom - pend > cr.bottom - margin) d = er.bottom - pend - (cr.bottom - margin);
     const target = Math.max(0, Math.min(scY.scrollHeight - scY.clientHeight, base + d));
+    bindScrollCancel(scY, animY, 'scrollTop');
     if (instant) {
       scY.scrollTop = target;
       animY.sc = null; // cancel any prior animation on this axis
+      animY.last = target;
     } else {
       animY.sc = scY;
       animY.target = target;
@@ -167,9 +238,11 @@ function retarget(el: HTMLElement, instant = false): void {
     if (er.left - pend < cr.left + margin) d = er.left - pend - (cr.left + margin);
     else if (er.right - pend > cr.right - margin) d = er.right - pend - (cr.right - margin);
     const target = Math.max(0, Math.min(scX.scrollWidth - scX.clientWidth, base + d));
+    bindScrollCancel(scX, animX, 'scrollLeft');
     if (instant) {
       scX.scrollLeft = target;
       animX.sc = null;
+      animX.last = target;
     } else {
       animX.sc = scX;
       animX.target = target;
@@ -189,10 +262,12 @@ function stepAxis(a: AxisAnim, prop: 'scrollTop' | 'scrollLeft'): boolean {
   const cur = sc[prop];
   if (Math.abs(a.target - cur) <= SNAP) {
     sc[prop] = a.target;
+    a.last = a.target;
     a.sc = null;
     return false;
   }
   sc[prop] = cur + (a.target - cur) * EASE;
+  a.last = sc[prop];
   return true;
 }
 
@@ -216,6 +291,27 @@ export function nextInDirection(dir: Direction): HTMLElement | null {
   // via the left-edge reveal.
   if (!active || !list.includes(active)) {
     return list.find((e) => visible(e) && !e.hasAttribute('data-sidebar')) || list.find(visible) || null;
+  }
+
+  // Re-anchor when focus was scrolled out of view by a MANUAL pointer/wheel
+  // pan (not the d-pad glide). Otherwise a d-pad press scores geometry from the
+  // off-screen anchor and scrolls back to it; instead grab the focusable the
+  // user is looking at (viewport centre) and land there.
+  //
+  // Gate on `!anim.sc`: while a glide is in flight the eased content lags the
+  // focus ring, so the active thumb is briefly below the viewport DURING normal
+  // held-d-pad scrolling — re-anchoring then would yank focus back up every
+  // press (rubberband). A manual scroll cancels the glide (bindScrollCancel
+  // nulls anim.sc), so anim.sc === null means the off-screen state is real.
+  {
+    const axis = dir === 'left' || dir === 'right' ? 'x' : 'y';
+    const anim = axis === 'y' ? animY : animX;
+    const sc = scrollParent(active, axis);
+    const vp = sc ? sc.getBoundingClientRect() : windowVp();
+    if (!anim.sc && !intersectsViewport(active, vp)) {
+      const el = bestInViewport(active.hasAttribute('data-sidebar'), vp);
+      if (el) return el;
+    }
   }
 
   // Thumbnails form a linear chronological sequence (data-seq). Justified rows

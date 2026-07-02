@@ -1,6 +1,6 @@
 {
   "name": "immich-webos",
-  "version": "0.9.2",
+  "version": "0.9.5",
   "description": "Native webOS TV app for browsing an Immich photo/video server",
   "private": true,
   "license": "MIT",
@@ -15,7 +15,7 @@
     "package": "npm run build && ares-package dist service -o out",
     "install-tv": "ares-install --device lg_c2 ./out/com.immich.webos_$(node -p \"require('./package.json').version\")_all.ipk",
     "launch": "ares-launch --device lg_c2 com.immich.webos",
-    "deploy": "npm run package && npm run install-tv && npm run launch",
+    "deploy": "node scripts/deploy.mjs",
     "postinstall": "patch-package"
   },
   "dependencies": {

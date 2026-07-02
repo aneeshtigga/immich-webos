@@ -3,7 +3,7 @@ import { memo } from 'preact/compat';
 import { TimeBucket, BucketColumns } from '../api/client';
 import { Asset, flattenBucket } from '../api/assets';
 import { Thumb } from './Thumb';
-import { bucketObserver } from './lazyObserver';
+import { bucketObserver, setLazyRoot } from './lazyObserver';
 import { justify, targetRowHeight, GRID_GAP as GAP } from './justified';
 
 const DAY_SEP = 5; // px gap inserted between day-groups on a shared row
@@ -76,6 +76,15 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Point the shared lazy observers at THIS grid's scroll container. Child Thumb
+  // / BucketSection effects run first (root=null), so setLazyRoot rebuilds and
+  // re-observes them against the scroller — without which rootMargin is clipped
+  // by .grid-scroll and the 2-page prefetch never triggers ahead of the viewport.
+  useEffect(() => {
+    setLazyRoot(scrollRef.current);
+    return () => setLazyRoot(null);
   }, []);
 
   // notify caller whenever the flat asset list grows so it can update live views
@@ -168,7 +177,9 @@ const BucketSection = memo(function BucketSection({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    bucketObserver.observe(el, () => ensureBucket(tb));
+    bucketObserver.observe(el, (inside) => {
+      if (inside) ensureBucket(tb);
+    });
     return () => bucketObserver.unobserve(el);
   }, [tb, ensureBucket]);
 
