@@ -6,6 +6,9 @@ out/
 *.log
 .vite/
 
+# local tooling (Claude skills, screenshot shooter)
+.claude/
+
 # local product doc, not shipped
 docs/PRD.md
 
