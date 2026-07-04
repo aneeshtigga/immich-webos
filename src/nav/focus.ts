@@ -406,6 +406,13 @@ export function nextInDirection(dir: Direction): HTMLElement | null {
         perp = Math.abs(dx);
         break;
     }
+    // Reject candidates that lie more to the side than forward. The sign checks
+    // above only require a candidate to be *past* the axis edge, so a control
+    // one row up but barely to the right (e.g. the https:// chip when moving
+    // Right from Email & Password) scores a tiny primary and beats the true
+    // in-line neighbour. Constrain to a 45° cone of the requested direction so
+    // "predominantly in that direction" actually holds.
+    if (perp > primary) continue;
     // perpendicular offset weighted heavily so we stay in the same row/column
     const score = primary + perp * 2;
     if (score < bestScore) {
