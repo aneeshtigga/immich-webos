@@ -33,6 +33,11 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
   const [buckets, setBuckets] = useState<TimeBucket[]>([]);
   const [loaded, setLoaded] = useState<Record<string, Asset[]>>({});
   const [error, setError] = useState('');
+  // Per-bucket asset-load failures. A month's assets are fetched separately from
+  // the bucket LIST, so this failing (server not serving that bucket, auth
+  // expired, binary/JSON route blocked) used to leave the section stuck on its
+  // month placeholder with no photos and no signal. Surface it per section.
+  const [failed, setFailed] = useState<Record<string, string>>({});
   const [width, setWidth] = useState(window.innerWidth - 96 - 32);
   const [rowH, setRowH] = useState(targetRowHeight());
   const loadingRef = useRef<Set<string>>(new Set());
@@ -99,9 +104,16 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
     (tb: string) => {
       if (loadedRef.current[tb] || loadingRef.current.has(tb)) return;
       loadingRef.current.add(tb);
+      setFailed((f) => {
+        if (!f[tb]) return f;
+        const { [tb]: _drop, ...rest } = f;
+        return rest;
+      });
       loadBucket(tb)
         .then((cols) => setLoaded((m) => ({ ...m, [tb]: flattenBucket(cols) })))
-        .catch(() => {})
+        .catch((e) =>
+          setFailed((f) => ({ ...f, [tb]: e?.status ? `HTTP ${e.status}` : e?.message || 'load failed' })),
+        )
         .finally(() => loadingRef.current.delete(tb));
     },
     [loadBucket],
@@ -146,6 +158,7 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
           key={b.timeBucket}
           bucket={b}
           assets={loaded[b.timeBucket]}
+          failed={failed[b.timeBucket]}
           width={width}
           rowH={rowH}
           ensureBucket={ensureBucket}
@@ -159,6 +172,7 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
 const BucketSection = memo(function BucketSection({
   bucket,
   assets,
+  failed,
   width,
   rowH,
   ensureBucket,
@@ -166,6 +180,7 @@ const BucketSection = memo(function BucketSection({
 }: {
   bucket: TimeBucket;
   assets?: Asset[];
+  failed?: string;
   width: number;
   rowH: number;
   ensureBucket: (tb: string) => void;
@@ -286,15 +301,28 @@ const BucketSection = memo(function BucketSection({
       ) : (
         <>
           <h2 class="bucket-title">{formatBucket(tb)}</h2>
-          {/* placeholder block sized from the known count so scroll height is
-              stable. Estimate columns from the current row height (~square-ish
-              cells) so the reserved height roughly matches the real layout. */}
-          <div
-            class="bucket-ph"
-            style={{
-              height: `${Math.ceil(Math.min(bucket.count, 60) / Math.max(3, Math.round(width / (rowH * 1.2)))) * (rowH + GAP)}px`,
-            }}
-          />
+          {failed ? (
+            // Assets for this month couldn't be fetched. Show why + a way to retry
+            // instead of a silent placeholder that reads as "still loading".
+            <button
+              type="button"
+              data-focusable
+              class="bucket-error focusable"
+              onClick={() => ensureBucket(tb)}
+            >
+              Couldn't load these photos ({failed}). Select to retry.
+            </button>
+          ) : (
+            // placeholder block sized from the known count so scroll height is
+            // stable. Estimate columns from the current row height (~square-ish
+            // cells) so the reserved height roughly matches the real layout.
+            <div
+              class="bucket-ph"
+              style={{
+                height: `${Math.ceil(Math.min(bucket.count, 60) / Math.max(3, Math.round(width / (rowH * 1.2)))) * (rowH + GAP)}px`,
+              }}
+            />
+          )}
         </>
       )}
     </section>
@@ -345,7 +373,13 @@ function formatDay(key: string): string {
 }
 
 function formatBucket(iso: string): string {
-  const d = new Date(iso);
+  // Newer Immich returns date-only bucket keys ("2025-02-01"). new Date() parses
+  // those as UTC midnight, so in a negative-UTC zone the local time rolls back a
+  // day and the header shows the previous month (Feb bucket -> "January"). Parse
+  // the calendar parts as a LOCAL date instead. Full-ISO keys from older servers
+  // are real timestamps, so keep parsing those as-is.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long' });
 }

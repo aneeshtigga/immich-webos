@@ -809,8 +809,34 @@ select {
   /* neutral grey (inherits .thumb's --surface-2) until the thumbnail loads —
      cheapest paint on the TV; no gradient/shimmer/decode. */
 }
+.thumb-ph--error {
+  /* distinguish a failed thumbnail from a still-loading grey cell */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-dim, rgba(255, 255, 255, 0.35));
+  opacity: 0.45;
+}
 .bucket-ph {
   width: 100%;
+}
+.bucket-error {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 4px 0 18px;
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 120, 120, 0.4);
+  border-radius: 10px;
+  background: rgba(255, 80, 80, 0.08);
+  color: var(--fg);
+  font-size: 18px;
+}
+.bucket-error:focus,
+.bucket-error.is-focused {
+  outline: none;
+  border-color: rgba(255, 160, 160, 0.9);
+  background: rgba(255, 80, 80, 0.16);
 }
 .thumb-badge {
   position: absolute;

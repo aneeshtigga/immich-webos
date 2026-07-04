@@ -54,9 +54,12 @@ export default defineConfig({
   base: './',
   plugins: [preact(), webosClassicScript(), stampAppinfoVersion()],
   build: {
-    // chrome58 keeps JS syntax compatible with webOS 5.0+ (Chromium 68); webOS
-    // 6.x is Chromium 79. (CSS feature support is handled in global.css.)
-    target: 'chrome58',
+    // chrome53 = webOS 4.0 (LG 2018 OLED, e.g. B8). esbuild down-levels async/
+    // await (native only from Chrome 55) into a Promise state machine, so the
+    // bundle parses and runs on that Chromium too. webOS 4.5/5.0 = Chromium 68,
+    // 6.x = 79. Runtime API gaps (e.g. AbortController, Chrome 66) are handled in
+    // code, not by the target. (CSS feature support is handled in global.css.)
+    target: 'chrome53',
     assetsInlineLimit: 0,
     cssCodeSplit: false,
     // no module-preload polyfill — it injects modulepreload <link>s a classic

@@ -19,6 +19,10 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
   const ref = useRef<HTMLButtonElement>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [near, setNear] = useState(false);
+  const [failed, setFailed] = useState(false);
+  // Bumped by <img onError> to force one controlled re-fetch of a stale/broken
+  // blob. Bounded so a genuinely un-decodable asset can't loop forever.
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     const el = ref.current;
@@ -48,17 +52,28 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
     let timer = 0;
     const attempt = (n: number) => {
       loadThumb(assetId)
-        .then((url) => alive && setSrc(url))
+        .then((url) => {
+          if (!alive) return;
+          setSrc(url);
+          setFailed(false);
+        })
         .catch(() => {
-          if (alive && n < 4) timer = window.setTimeout(() => attempt(n + 1), 1000 * (n + 1));
+          if (!alive) return;
+          if (n < 4) timer = window.setTimeout(() => attempt(n + 1), 1000 * (n + 1));
+          // Retries exhausted (server never served this thumbnail — e.g. it isn't
+          // generated yet, or the binary route is blocked). Mark failed so the
+          // cell shows a distinct broken state instead of a silent grey blank
+          // that reads as "still loading" forever.
+          else setFailed(true);
         });
     };
+    setFailed(false);
     attempt(0);
     return () => {
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [near, assetId]);
+  }, [near, assetId, reload]);
 
   return (
     <button
@@ -76,7 +91,26 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
         // off-screen images and re-decode them on scroll-back — the placeholder→
         // image flash on already-visited rows. decoding="async" keeps the decode
         // off the scroll frame.
-        <img class="thumb-img" src={src} decoding="async" />
+        <img
+          class="thumb-img"
+          src={src}
+          decoding="async"
+          // A blob: URL can go stale (LRU revoked it out from under a still-
+          // mounted <img>) or decode-fail. Drop it and re-fetch (bounded) so the
+          // cell recovers instead of rendering a broken-image box silently.
+          onError={() => {
+            setSrc(null);
+            // Capped: once we stop incrementing, the load effect no longer re-runs
+            // and the exhausted-retry path marks the cell failed.
+            setReload((r) => Math.min(r + 1, 3));
+          }}
+        />
+      ) : failed ? (
+        // Thumbnail could not be fetched after retries — show a broken marker so
+        // it's visibly distinct from a still-loading grey cell.
+        <div class="thumb-ph thumb-ph--error">
+          <Icon name="photos" size={28} />
+        </div>
       ) : (
         // Neutral grey cell until the thumbnail loads.
         <div class="thumb-ph" />
