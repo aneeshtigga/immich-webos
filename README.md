@@ -27,13 +27,13 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 
 ## Install guide
 
-Pick **one** of the two methods below — they're alternatives, not sequential steps.
+Pick **one** of the two methods below
 
-### Option 1 - From the Homebrew Channel (recommended)
+### 🍺 From the Homebrew Channel (recommended)
 
 The app is on the official [webOS Homebrew](https://www.webosbrew.org/) repo. Open the **Homebrew App** on your TV, find **immich webOS** in the app list, and install it.
 
-### Option 2 - From a downloaded .ipk
+### 📦 From a downloaded .ipk
 
 [![Download latest .ipk](https://img.shields.io/github/v/release/aneeshtigga/immich-webos?label=Download%20.ipk&logo=lg&style=for-the-badge)](https://github.com/aneeshtigga/immich-webos/releases/latest/download/com.immich.webos.ipk)
 
