@@ -1333,6 +1333,65 @@ select {
   border-radius: 8px;
 }
 
+/* ---------- Confirm dialog ---------- */
+/* Full overlay above the viewer (50) and sidebar (6); dims the shell behind a
+   centred card. */
+.confirm-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+.confirm-card {
+  width: 600px;
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 4vmin 3.4vmin 3.4vmin;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+.confirm-title {
+  font-size: 3.6vmin;
+  font-weight: 700;
+  color: var(--fg);
+  margin: 0 0 1.4vmin;
+}
+.confirm-message {
+  font-size: 2.4vmin;
+  line-height: 1.4;
+  color: var(--muted);
+  margin: 0 0 3.4vmin;
+}
+.confirm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4vmin;
+}
+.confirm-btn {
+  width: 100%;
+  padding: 1.6vmin 2vmin;
+  font-size: 2.4vmin;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: none;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 12px;
+}
+.confirm-btn--danger {
+  background: #b3261e;
+  color: #fff;
+}
+/* Focus ring on the destructive action reads in a darker red, not the blue
+   accent, so it stays in the button's own colour family. */
+.confirm-btn--danger.focusable:focus {
+  box-shadow: 0 0 0 8px #7a171268;
+}
+
 ::-webkit-scrollbar {
   width: 0;
   height: 0;

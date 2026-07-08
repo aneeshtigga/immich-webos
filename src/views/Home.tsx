@@ -13,6 +13,7 @@ import { clearSession, getUser } from '../auth/store';
 import { Asset } from '../api/assets';
 import { PhotoGrid } from '../components/PhotoGrid';
 import { Sidebar, Route } from '../components/Sidebar';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Albums } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
@@ -35,6 +36,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const [album, setAlbum] = useState<Album | null>(null);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // The content focusable (thumbnail) that had focus when the sidebar was
   // opened, so collapsing the sidebar restores it instead of jumping to the top
@@ -163,9 +165,9 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     }
   }, [viewer, album, sidebarOpen, closeViewer]);
 
-  // disable the grid/sidebar remote handler while a fullscreen overlay
-  // (viewer or exit dialog) owns the keys
-  useRemote({ onBack, onEdge, enabled: !viewer });
+  // disable the grid/sidebar remote handler while an overlay that owns the keys
+  // is up — the fullscreen viewer, or the logout confirmation dialog
+  useRemote({ onBack, onEdge, enabled: !viewer && !confirmLogout });
 
   const navigate = (r: Route) => {
     setAlbum(null);
@@ -177,7 +179,19 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     setTimeout(() => focusFirstContent(), 0);
   };
 
+  // Sign-out from the sidebar asks first. Remember the trigger button so a
+  // cancel returns focus to it instead of stranding the d-pad on nothing.
+  const logoutTrigger = useRef<HTMLElement | null>(null);
+  const requestLogout = () => {
+    logoutTrigger.current = document.activeElement as HTMLElement | null;
+    setConfirmLogout(true);
+  };
+  const cancelLogout = () => {
+    setConfirmLogout(false);
+    setTimeout(() => logoutTrigger.current?.focus(), 0);
+  };
   const doLogout = async () => {
+    setConfirmLogout(false);
     await logout();
     clearSession();
     onLogout();
@@ -201,8 +215,18 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         active={route}
         userName={user?.name}
         onNavigate={navigate}
-        onLogout={doLogout}
+        onLogout={requestLogout}
       />
+      {confirmLogout && (
+        <ConfirmDialog
+          title="Sign out?"
+          message="You'll need to sign in again to view your photos."
+          confirmLabel="Sign out"
+          destructive
+          onConfirm={doLogout}
+          onCancel={cancelLogout}
+        />
+      )}
       {/* Invisible click-catcher over the content while the sidebar is open: a
           pointer click anywhere outside the sidebar (magic remote / mouse)
           collapses it. Transparent — no dark scrim — and it sits below the
