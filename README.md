@@ -5,11 +5,9 @@
   </picture>
 </p>
 
-A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch. Built with [Preact](https://preactjs.com/) + [Vite](https://vitejs.dev/), driven entirely by the LG remote.
+A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch.
 
 > Unofficial, community-built app — not affiliated with the [Immich project](https://immich.app). "Immich" is a trademark of its owners.
-
-[![Download latest .ipk](https://img.shields.io/github/v/release/aneeshtigga/immich-webos?label=Download%20.ipk&logo=lg&style=for-the-badge)](https://github.com/aneeshtigga/immich-webos/releases/latest/download/com.immich.webos.ipk)
 
 <p align="center">
   <picture>
@@ -18,20 +16,34 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
   </picture>
 </p>
 
+---
+
 ## Requirements
 
 - An [Immich](https://immich.app/) server you can reach from the TV
-- Node.js 18+
-- An LG webOS TV (webOS 5.0+ / Chromium 68+) in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app), or the webOS emulator
-- [`@webos-tools/cli`](https://www.npmjs.com/package/@webos-tools/cli) (installed as a dev dependency) for packaging and deploy
+- An LG TV running webOS 5.0 or above
 
-## Install from a release
+---
 
-Grab the latest `com.immich.webos.ipk` from the [releases page](https://github.com/aneeshtigga/immich-webos/releases/latest) (or the button above), then sideload it onto a TV in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app):
+## Install guide
+
+Pick **one** of the two methods below — they're alternatives, not sequential steps.
+
+### Option 1 - From the Homebrew Channel (recommended)
+
+The app is on the official [webOS Homebrew](https://www.webosbrew.org/) repo. Open the **Homebrew App** on your TV, find **immich webOS** in the app list, and install it.
+
+### Option 2 - From a downloaded .ipk
+
+[![Download latest .ipk](https://img.shields.io/github/v/release/aneeshtigga/immich-webos?label=Download%20.ipk&logo=lg&style=for-the-badge)](https://github.com/aneeshtigga/immich-webos/releases/latest/download/com.immich.webos.ipk)
+
+Grab the latest `com.immich.webos.ipk` from the download button above, then sideload it onto a TV in [developer mode](https://webostv.developer.lge.com/develop/getting-started/developer-mode-app):
 
 ```bash
 ares-install --device <your-device> com.immich.webos.ipk
 ```
+
+---
 
 ## Screenshots
 
@@ -64,6 +76,8 @@ ares-install --device <your-device> com.immich.webos.ipk
 
 > Screenshots use the public Immich [demo server](https://demo.immich.app).
 
+---
+
 ## Sign in with your phone (QR)
 
 The login screen can show a QR code that lets you sign in from your phone
@@ -87,6 +101,8 @@ VITE_PAIR_ISSUER=https://your-relay.example npm run build
 A reference relay implementation lives in [`relay/`](relay/) (see its
 [README](relay/README.md)); [`relay/PROPOSAL.md`](relay/PROPOSAL.md) describes
 the contract for Immich to implement the device flow natively.
+
+---
 
 ## Development
 
@@ -129,6 +145,8 @@ google-chrome \
 
 Use this window only for local dev — it has web security turned off.
 
+---
+
 ## Build & deploy to a TV
 
 The deploy scripts target a webOS device registered with `ares-setup-device` under the name `lg_c2`. Rename in `package.json` to match your device.
@@ -146,21 +164,7 @@ npm run install-tv # ares-install the .ipk onto lg_c2
 npm run launch     # ares-launch the installed app
 ```
 
-## Project layout
-
-```
-src/
-  api/         Immich REST client, media cache, device-auth + relay bridge
-  auth/        session storage + pairing-issuer config
-  components/  Focusable primitives, photo grid, sidebar, QR code, icons
-  nav/         remote key codes, spatial focus, back/exit handling
-  views/       Login, Home, Albums, Search, Fullscreen
-  assets/      login background + app logo
-  fonts/       bundled Inter + DM Sans (Latin woff2)
-service/       on-device pairing relay (webOS JS service, packaged in the .ipk)
-relay/         reference external relay + RFC 8628 proposal for Immich
-public/        appinfo.json + icons/splash for the webOS package
-```
+---
 
 ## License
 
