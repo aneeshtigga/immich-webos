@@ -94,7 +94,8 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
 function formatDuration(d?: number | string | null): string {
   if (d == null) return '';
   if (typeof d === 'string' && d.includes(':')) return d.split('.')[0].replace(/^00:/, '');
-  const secs = typeof d === 'string' ? parseFloat(d) : d;
+  // Immich v3 sends duration as integer milliseconds; v2 only ever sent strings.
+  const secs = typeof d === 'string' ? parseFloat(d) : d / 1000;
   if (!isFinite(secs)) return '';
   const m = Math.floor(secs / 60);
   const s = Math.floor(secs % 60);

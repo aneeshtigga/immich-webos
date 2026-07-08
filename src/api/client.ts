@@ -204,7 +204,7 @@ export async function getAlbumBucket(
 interface AssetResponseDto {
   id: string;
   type: string; // "IMAGE" | "VIDEO"
-  duration: string | null;
+  duration: number | string | null; // string "HH:MM:SS" (v2) or integer ms (v3)
   fileCreatedAt?: string;
   width?: number;
   height?: number;
