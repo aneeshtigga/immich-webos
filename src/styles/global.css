@@ -847,6 +847,11 @@ select {
   color: inherit;
   border-radius: 12px; /* match .album-cover so the focus ring is rounded */
 }
+/* Pointer hover: same lighter ring as grid thumbnails. :not(:focus) so it never
+   overrides the full focus ring on the focused card. */
+.album-card:hover:not(:focus) {
+  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
+}
 .album-cover {
   position: relative;
   width: 100%;
@@ -868,7 +873,7 @@ select {
   object-fit: cover;
 }
 .album-meta {
-  padding: 10px 4px;
+  padding: 10px 10px;
 }
 .album-name {
   font-size: 21px;
@@ -877,6 +882,56 @@ select {
 .album-count {
   font-size: 17px;
   color: var(--muted);
+}
+
+/* Opened album: fixed header (back + title) above the scrolling grid. */
+.album-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.album-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 16px 10px;
+  flex: none;
+}
+.album-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--fg);
+  cursor: pointer;
+}
+.album-header-text {
+  min-width: 0;
+}
+.album-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.album-subtitle {
+  margin-top: 2px;
+  font-size: 18px;
+  color: var(--muted);
+}
+/* grid fills the space under the header instead of its default full height */
+.album-view > .grid-scroll {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  padding-top: 6px;
 }
 
 /* ---------- Search ---------- */
@@ -1032,6 +1087,10 @@ select {
 .person-chip:focus .person-face {
   box-shadow: 0 0 0 4px var(--focus);
 }
+/* Pointer hover: same lighter ring as grid thumbnails, on the round face. */
+.person-chip:hover:not(:focus) .person-face {
+  box-shadow: 0 0 0 4px rgba(172, 203, 250, 0.4);
+}
 
 /* Places: card grid with a city label overlaid on a cover photo */
 .places-grid {
@@ -1045,6 +1104,10 @@ select {
   padding: 0;
   color: inherit;
   border-radius: 12px; /* match .place-cover so the focus ring is rounded */
+}
+/* Pointer hover: same lighter ring as grid thumbnails. */
+.place-card:hover:not(:focus) {
+  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
 }
 .place-cover {
   position: relative;

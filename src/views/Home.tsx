@@ -12,9 +12,10 @@ import {
 import { clearSession, getUser } from '../auth/store';
 import { Asset } from '../api/assets';
 import { PhotoGrid } from '../components/PhotoGrid';
+import { Icon } from '../components/Icon';
 import { Sidebar, Route } from '../components/Sidebar';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Albums } from './Albums';
+import { Albums, AlbumsRestore } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
 import { useRemote } from '../nav/useRemote';
@@ -44,6 +45,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   // position is already intact — only focus needs returning.
   const lastContentFocus = useRef<HTMLElement | null>(null);
   const loadNextRef = useRef<(() => void) | null>(null);
+  // Albums-list scroll + focus to restore when returning from an opened album.
+  const albumsRestore = useRef<AlbumsRestore | null>(null);
   const viewerRef = useRef(viewer);
   viewerRef.current = viewer;
   const user = getUser();
@@ -86,6 +89,9 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   // closing restores focus to the viewed thumbnail explicitly (closeViewer).
   useEffect(() => {
     setRoot(rootRef.current);
+    // Returning to the albums list restores its own scroll + focus (see Albums);
+    // don't yank focus to the first card in that case.
+    if (!album && route === 'albums' && albumsRestore.current) return;
     setTimeout(() => focusFirstContent(), 0);
   }, [route, album]);
 
@@ -131,7 +137,11 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   // bucket asynchronously, so retry for a short window until a thumbnail exists
   // rather than giving up on the first (empty) tick.
   const focusFirstContent = (attempt = 0) => {
-    const el = focusables().find((e) => !e.hasAttribute('data-sidebar'));
+    // Skip the sidebar and any header control (e.g. the album back button) so a
+    // freshly-opened view lands on the first content item, not a chrome button.
+    const el = focusables().find(
+      (e) => !e.hasAttribute('data-sidebar') && !e.hasAttribute('data-noautofocus'),
+    );
     if (el) {
       el.focus();
     } else if (attempt < 30) {
@@ -170,6 +180,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   useRemote({ onBack, onEdge, enabled: !viewer && !confirmLogout });
 
   const navigate = (r: Route) => {
+    albumsRestore.current = null;
     setAlbum(null);
     setRoute(r);
     setSidebarOpen(false);
@@ -240,13 +251,33 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             switching tabs eases in instead of swapping abruptly */}
         <div class="view-enter" key={album ? 'album:' + album.id : route}>
           {album ? (
-            <PhotoGrid
-              loadBuckets={() => getAlbumBuckets(album.id)}
-              loadBucket={(tb) => getAlbumBucket(album.id, tb)}
-              onOpen={openViewer}
-              loadNextUnloaded={loadNextRef}
-              onAssetsChange={handleAssetsChange}
-            />
+            <div class="album-view">
+              <header class="album-header">
+                <button
+                  data-focusable
+                  data-noautofocus
+                  class="album-back focusable"
+                  onClick={() => setAlbum(null)}
+                  aria-label="Back to albums"
+                >
+                  <Icon name="back" size={28} />
+                </button>
+                <div class="album-header-text">
+                  <h1 class="album-title">{album.albumName}</h1>
+                  <div class="album-subtitle">
+                    {album.assetCount} item{album.assetCount === 1 ? '' : 's'}
+                    {album.shared ? ' · shared' : ''}
+                  </div>
+                </div>
+              </header>
+              <PhotoGrid
+                loadBuckets={() => getAlbumBuckets(album.id)}
+                loadBucket={(tb) => getAlbumBucket(album.id, tb)}
+                onOpen={openViewer}
+                loadNextUnloaded={loadNextRef}
+                onAssetsChange={handleAssetsChange}
+              />
+            </div>
           ) : route === 'timeline' ? (
             <PhotoGrid
               loadBuckets={getTimelineBuckets}
@@ -266,7 +297,21 @@ export function Home({ onLogout }: { onLogout: () => void }) {
           ) : route === 'search' ? (
             <Search onOpen={openViewer} />
           ) : (
-            <Albums onOpenAlbum={(a) => setAlbum(a)} />
+            <Albums
+              onOpenAlbum={(a) => {
+                const grid =
+                  rootRef.current?.querySelector<HTMLElement>('.album-grid');
+                albumsRestore.current = {
+                  scrollTop: grid?.scrollTop ?? 0,
+                  albumId: a.id,
+                };
+                setAlbum(a);
+              }}
+              restore={albumsRestore.current}
+              onRestored={() => {
+                albumsRestore.current = null;
+              }}
+            />
           )}
         </div>
       </main>

@@ -181,7 +181,16 @@ export async function getFavoriteBucket(timeBucket: string): Promise<BucketColum
 // --- Albums ---
 
 export async function getAlbums(): Promise<Album[]> {
-  return jsonReq<Album[]>('/albums');
+  // `/albums` alone returns only albums the user owns. Albums shared *with*
+  // this account come back from `/albums?shared=true`, so fetch both and
+  // dedupe by id (owned-and-shared albums appear in both responses).
+  const [owned, shared] = await Promise.all([
+    jsonReq<Album[]>('/albums'),
+    jsonReq<Album[]>('/albums?shared=true'),
+  ]);
+  const byId = new Map<string, Album>();
+  for (const a of [...owned, ...shared]) byId.set(a.id, a);
+  return [...byId.values()];
 }
 
 // Album assets reuse the timeline endpoints with an albumId filter — same
