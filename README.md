@@ -104,19 +104,13 @@ the contract for Immich to implement the device flow natively.
 
 ### Want to login using the API Key?
 
-And do not want to give fuul access? Make sure you grant following permission.
-- activity.read 
+And do not want to give full access? Make sure you grant following permission.
 - asset.read
 - asset.view
 - album.read
-- face.read
-- library.read
-- timeline.read 
-- map.read 
+- timeline.read
 - person.read
-- tag.read 
 - user.read
-
 
 ---
 
