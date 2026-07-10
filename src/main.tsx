@@ -1,5 +1,11 @@
 import { render } from 'preact';
 import { App } from './app';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/global.css';
 
-render(<App />, document.getElementById('app')!);
+render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>,
+  document.getElementById('app')!,
+);

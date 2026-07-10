@@ -1494,3 +1494,73 @@ select {
   height: 0;
 }
 
+/* ---------- Error boundary ---------- */
+.errbox {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6vmin;
+  overflow: auto;
+}
+.errbox-inner {
+  max-width: 80vw;
+}
+.errbox-title {
+  font-size: 34px;
+  font-weight: 700;
+  margin: 0 0 16px;
+  color: var(--fg);
+}
+.errbox-msg {
+  font-size: 22px;
+  color: #ff6b6b;
+  margin: 0 0 20px;
+  word-break: break-word;
+}
+.errbox-stack {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--muted);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.errbox-actions {
+  display: flex;
+  margin: 24px 0 12px;
+}
+.errbox-actions > * + * {
+  margin-left: 16px;
+}
+.errbox-btn {
+  font-size: 20px;
+  color: var(--fg);
+  background: var(--surface-2);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 12px 22px;
+  cursor: pointer;
+}
+.errbox-btn:hover,
+.errbox-btn:focus {
+  outline: none;
+  border-color: var(--focus);
+}
+.errbox-hint {
+  font-size: 16px;
+  color: var(--muted);
+  margin: 0;
+}
+

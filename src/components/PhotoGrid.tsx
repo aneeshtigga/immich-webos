@@ -5,6 +5,7 @@ import { Asset, flattenBucket } from '../api/assets';
 import { Thumb } from './Thumb';
 import { bucketObserver, setLazyRoot } from './lazyObserver';
 import { justify, targetRowHeight, GRID_GAP as GAP } from './justified';
+import { reportError } from './ErrorBoundary';
 
 const DAY_SEP = 5; // px gap inserted between day-groups on a shared row
 const MIN_LABEL_WIDTH = 230; // min px between consecutive day labels (prevents collision)
@@ -101,7 +102,7 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
       loadingRef.current.add(tb);
       loadBucket(tb)
         .then((cols) => setLoaded((m) => ({ ...m, [tb]: flattenBucket(cols) })))
-        .catch(() => {})
+        .catch((e) => reportError(new Error(`Failed to load bucket ${tb}: ${e?.message ?? e}`)))
         .finally(() => loadingRef.current.delete(tb));
     },
     [loadBucket],
