@@ -257,6 +257,7 @@ const BucketSection = memo(function BucketSection({
                   assetId={a.id}
                   isVideo={a.isVideo}
                   duration={a.duration}
+                  isLive={!!a.livePhotoVideoId}
                   width={a.w}
                   height={a.h}
                   onSelect={() => onOpen(tb, myIdx)}

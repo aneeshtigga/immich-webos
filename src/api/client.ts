@@ -217,6 +217,7 @@ interface AssetResponseDto {
   fileCreatedAt?: string;
   width?: number;
   height?: number;
+  livePhotoVideoId?: string | null;
   exifInfo?: { exifImageWidth?: number; exifImageHeight?: number };
 }
 
@@ -231,6 +232,7 @@ function mapAsset(a: AssetResponseDto): import('./assets').Asset {
     duration: a.duration,
     ratio: h > 0 ? w / h : 1,
     createdAt: a.fileCreatedAt || '',
+    livePhotoVideoId: a.livePhotoVideoId ?? null,
   };
 }
 

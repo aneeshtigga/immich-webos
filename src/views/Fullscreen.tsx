@@ -44,6 +44,13 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [overlay, setOverlay] = useState(true);
   const [videoErr, setVideoErr] = useState(false);
   const [buffering, setBuffering] = useState(false);
+  // Live Photo: motionOn keeps the clip mounted; motionVisible drives its
+  // opacity. The clip mounts transparent (still shows through), fades IN only
+  // once it has a decoded frame (no black buffering flash), and fades OUT when
+  // it ends before unmounting.
+  const [motionOn, setMotionOn] = useState(false);
+  const [motionVisible, setMotionVisible] = useState(false);
+  const motionFadeTimer = useRef<number | undefined>(undefined);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const imgUrlRef = useRef<string | null>(null);
@@ -55,6 +62,34 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
 
   const asset = assets[i];
   const isVideo = !!asset?.isVideo;
+  // A still that carries a paired motion clip is a Live Photo.
+  const livePhotoId = asset && !isVideo ? asset.livePhotoVideoId ?? null : null;
+
+  // Autoplay the motion clip once each time a Live Photo is opened; clear it
+  // for plain photos and videos.
+  useEffect(() => {
+    window.clearTimeout(motionFadeTimer.current);
+    setMotionVisible(false);
+    setMotionOn(!!livePhotoId);
+  }, [asset?.id, livePhotoId]);
+
+  // Fade the motion clip out (revealing the still beneath) rather than cutting.
+  const MOTION_FADE_MS = 450;
+  const endMotion = useCallback(() => {
+    setMotionVisible(false);
+    window.clearTimeout(motionFadeTimer.current);
+    motionFadeTimer.current = window.setTimeout(() => setMotionOn(false), MOTION_FADE_MS);
+  }, []);
+  const replayMotion = useCallback(() => {
+    window.clearTimeout(motionFadeTimer.current);
+    setMotionVisible(false); // stays transparent until the first frame decodes
+    setMotionOn(true);
+  }, []);
+  const toggleMotion = useCallback(() => {
+    if (motionOn && motionVisible) endMotion();
+    else replayMotion();
+  }, [motionOn, motionVisible, endMotion, replayMotion]);
+  useEffect(() => () => window.clearTimeout(motionFadeTimer.current), []);
 
   // fire onNearEnd when within 5 of the end so the grid prefetches the next bucket
   useEffect(() => {
@@ -266,7 +301,10 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
       }
 
       // photo
-      if (dir === 'left') {
+      if (livePhotoId && (code === Key.Enter || code === Key.PlayPause)) {
+        e.preventDefault();
+        toggleMotion(); // OK/Enter plays or stops the Live Photo motion
+      } else if (dir === 'left') {
         e.preventDefault();
         go(-1);
       } else if (dir === 'right') {
@@ -276,7 +314,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isVideo, paused, go, seek, togglePlay, poke, onClose]);
+  }, [isVideo, paused, go, seek, togglePlay, poke, onClose, livePhotoId, toggleMotion]);
 
   if (!asset) return null;
 
@@ -332,6 +370,18 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
         <>
           {thumbSrc && !imgReady && <img class="fs-thumb-ph" src={thumbSrc} />}
           {imgSrc && <img class="fs-img" src={imgSrc} onLoad={() => setImgReady(true)} />}
+          {livePhotoId && motionOn && (
+            <video
+              class={'fs-motion' + (motionVisible ? ' visible' : '')}
+              src={videoStreamUrl(livePhotoId)}
+              autoPlay
+              muted
+              playsInline
+              onPlaying={() => setMotionVisible(true)}
+              onEnded={endMotion}
+              onError={() => setMotionOn(false)}
+            />
+          )}
         </>
       )}
 
@@ -350,6 +400,15 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
           </button>
           <div class="fs-top-right">
             {location && <span class="fs-location">{location}</span>}
+            {livePhotoId && (
+              <button
+                class={'fs-btn round' + (motionOn && motionVisible ? ' active' : '')}
+                onClick={replayMotion}
+                title="Play Live Photo"
+              >
+                <Icon name="live" size={28} />
+              </button>
+            )}
             {isVideo && (
               <button class="fs-btn" onClick={cycleQuality} title="Video quality">
                 <Icon name="hd" size={26} />

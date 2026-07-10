@@ -7,6 +7,7 @@ interface Props {
   assetId: string;
   isVideo: boolean;
   duration?: number | string | null;
+  isLive?: boolean;
   width: number;
   height: number;
   onSelect: () => void;
@@ -15,7 +16,7 @@ interface Props {
 // Single justified-grid cell sized to explicit width/height (aspect preserved
 // by the parent's justified-row math). Lazily fetches its thumbnail blob when
 // near the viewport. Marked focusable for remote nav.
-export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: Props) {
+export function Thumb({ assetId, isVideo, duration, isLive, width, height, onSelect }: Props) {
   const ref = useRef<HTMLButtonElement>(null);
   const [src, setSrc] = useState<string | null>(null);
   const [near, setNear] = useState(false);
@@ -83,8 +84,13 @@ export function Thumb({ assetId, isVideo, duration, width, height, onSelect }: P
       )}
       {isVideo && (
         <span class="thumb-badge">
-          <Icon name="playCircle" size={18} />
+          <Icon name="playCircle" size={24} />
           {formatDuration(duration)}
+        </span>
+      )}
+      {!isVideo && isLive && (
+        <span class="thumb-badge live">
+          <Icon name="live" size={24} />
         </span>
       )}
     </button>
