@@ -102,6 +102,16 @@ A reference relay implementation lives in [`relay/`](relay/) (see its
 [README](relay/README.md)); [`relay/PROPOSAL.md`](relay/PROPOSAL.md) describes
 the contract for Immich to implement the device flow natively.
 
+### Want to login using the API Key?
+
+And do not want to give full access? Make sure you grant following permission.
+- asset.read
+- asset.view
+- album.read
+- timeline.read
+- person.read
+- user.read
+
 ---
 
 ## Development
