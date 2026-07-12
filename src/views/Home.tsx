@@ -18,6 +18,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Albums, AlbumsRestore } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
+import { Wallpaper, resetWallpaperCaches } from './Wallpaper';
 import { useRemote } from '../nav/useRemote';
 import { setRoot, focusables, focus, elementInViewport, focusVisibleContent } from '../nav/focus';
 import { exitApp } from '../nav/exit';
@@ -38,6 +39,10 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  // true while the wallpaper slideshow overlay owns the keys (like `viewer`)
+  const [wpFullscreen, setWpFullscreen] = useState(false);
+  // set by the Wallpaper page to a handler that pops its own internal stack
+  const wallpaperBack = useRef<(() => boolean) | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   // The content focusable (thumbnail) that had focus when the sidebar was
   // opened, so collapsing the sidebar restores it instead of jumping to the top
@@ -170,14 +175,16 @@ export function Home({ onLogout }: { onLogout: () => void }) {
       setAlbum(null);
     } else if (sidebarOpen) {
       exitApp();
+    } else if (route === 'wallpaper' && wallpaperBack.current?.()) {
+      // Wallpaper page consumed Back (closed its detail/player)
     } else {
       openSidebarFocusActive();
     }
-  }, [viewer, album, sidebarOpen, closeViewer]);
+  }, [viewer, album, sidebarOpen, route, closeViewer]);
 
   // disable the grid/sidebar remote handler while an overlay that owns the keys
-  // is up — the fullscreen viewer, or the logout confirmation dialog
-  useRemote({ onBack, onEdge, enabled: !viewer && !confirmLogout });
+  // is up — the fullscreen viewer, the logout dialog, or the wallpaper slideshow
+  useRemote({ onBack, onEdge, enabled: !viewer && !confirmLogout && !wpFullscreen });
 
   const navigate = (r: Route) => {
     albumsRestore.current = null;
@@ -205,6 +212,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     setConfirmLogout(false);
     await logout();
     clearSession();
+    resetWallpaperCaches(); // drop the previous account's hero/pool caches
     onLogout();
   };
 
@@ -246,7 +254,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         <div class="sidebar-catch" onClick={collapseSidebar} />
       )}
 
-      <main class={'content ' + (sidebarOpen ? 'shifted' : '')}>
+      <main class={'content ' + (sidebarOpen ? 'shifted ' : '') + (route === 'wallpaper' ? 'wallpaper' : '')}>
         {/* keyed wrapper: changing view replaces it, replaying the fade-in so
             switching tabs eases in instead of swapping abruptly */}
         <div class="view-enter" key={album ? 'album:' + album.id : route}>
@@ -296,6 +304,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             />
           ) : route === 'search' ? (
             <Search onOpen={openViewer} />
+          ) : route === 'wallpaper' ? (
+            <Wallpaper backRef={wallpaperBack} onFullscreen={setWpFullscreen} />
           ) : (
             <Albums
               onOpenAlbum={(a) => {

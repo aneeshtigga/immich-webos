@@ -7,7 +7,7 @@ import pkg from '../../package.json';
 
 const APP_VERSION = 'v' + pkg.version;
 
-export type Route = 'timeline' | 'albums' | 'favorites' | 'search';
+export type Route = 'timeline' | 'albums' | 'favorites' | 'search' | 'wallpaper';
 
 interface Item {
   route: Route;
@@ -20,6 +20,7 @@ const ITEMS: Item[] = [
   { route: 'search', label: 'Search', icon: 'search' },
   { route: 'albums', label: 'Albums', icon: 'albums' },
   { route: 'favorites', label: 'Favorites', icon: 'favorite' },
+  { route: 'wallpaper', label: 'Wallpaper', icon: 'wallpaper' },
 ];
 
 interface Props {

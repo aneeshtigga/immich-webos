@@ -218,6 +218,7 @@ interface AssetResponseDto {
   width?: number;
   height?: number;
   livePhotoVideoId?: string | null;
+  thumbhash?: string | null; // null when no thumbnail has been generated yet
   exifInfo?: { exifImageWidth?: number; exifImageHeight?: number };
 }
 
@@ -233,6 +234,7 @@ function mapAsset(a: AssetResponseDto): import('./assets').Asset {
     ratio: h > 0 ? w / h : 1,
     createdAt: a.fileCreatedAt || '',
     livePhotoVideoId: a.livePhotoVideoId ?? null,
+    thumbhash: a.thumbhash ?? null,
   };
 }
 
@@ -254,6 +256,14 @@ async function metadataSearch(
     { method: 'POST', body: JSON.stringify(body) },
   );
   return res.assets.items.map(mapAsset);
+}
+
+// Assets by type (IMAGE/VIDEO), newest first. One request, so sparse types
+// (e.g. videos) return quickly instead of walking the whole timeline.
+export async function searchByType(
+  type?: 'IMAGE' | 'VIDEO',
+): Promise<import('./assets').Asset[]> {
+  return metadataSearch(type ? { type } : {});
 }
 
 // --- People ---

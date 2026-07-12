@@ -31,6 +31,16 @@ export const ICONS = {
   // mdiMotionPhotosOn — the Live Photo glyph Immich's web uses.
   live:
     'M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z',
+  // mdiImageFilterHdr — landscape/scenery glyph, reads as "wallpaper".
+  wallpaper:
+    'M14,6L10.25,11L13.1,14.8L11.5,16C9.81,13.75 7,10 7,10L1,18H23L14,6Z',
+  // mdiCheck — selection tick.
+  check: 'M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z',
+  // mdiMusic
+  music:
+    'M21,3V15.5A3.5,3.5 0 0,1 17.5,19A3.5,3.5 0 0,1 14,15.5A3.5,3.5 0 0,1 17.5,12C18.04,12 18.55,12.12 19,12.34V6.47L9,8.6V17.5A3.5,3.5 0 0,1 5.5,21A3.5,3.5 0 0,1 2,17.5A3.5,3.5 0 0,1 5.5,14C6.04,14 6.55,14.12 7,14.34V6L21,3Z',
+  // mdiSkipNext
+  skipNext: 'M16,18H18V6H16M6,18L14.5,12L6,6V18Z',
 } as const;
 
 export type IconName = keyof typeof ICONS;
