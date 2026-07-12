@@ -53,6 +53,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const motionFadeTimer = useRef<number | undefined>(undefined);
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const motionRef = useRef<HTMLVideoElement>(null);
   const imgUrlRef = useRef<string | null>(null);
   const hideTimer = useRef<number | undefined>(undefined);
   const resumeAt = useRef(0); // remember position across quality switch
@@ -74,7 +75,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   }, [asset?.id, livePhotoId]);
 
   // Fade the motion clip out (revealing the still beneath) rather than cutting.
-  const MOTION_FADE_MS = 450;
+  const MOTION_FADE_MS = 600; // must match .fs-img opacity transition in CSS
   const endMotion = useCallback(() => {
     setMotionVisible(false);
     window.clearTimeout(motionFadeTimer.current);
@@ -369,17 +370,40 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
       ) : (
         <>
           {thumbSrc && !imgReady && <img class="fs-thumb-ph" src={thumbSrc} />}
-          {imgSrc && <img class="fs-img" src={imgSrc} onLoad={() => setImgReady(true)} />}
           {livePhotoId && motionOn && (
             <video
-              class={'fs-motion' + (motionVisible ? ' visible' : '')}
+              ref={motionRef}
+              class="fs-motion"
               src={videoStreamUrl(livePhotoId)}
               autoPlay
               muted
               playsInline
-              onPlaying={() => setMotionVisible(true)}
+              // webOS fires `playing` at the first frame then can stall the
+              // short transcoded clip; kick playback on canplay and re-issue
+              // play() on any stall so it does not freeze on frame one.
+              onCanPlay={() => { void motionRef.current?.play().catch(() => {}); }}
+              // Reveal only once frames are actually advancing on the hardware
+              // plane. `playing` fires a beat early on webOS, so fading the still
+              // then punches a black frame mid-fade; waiting for currentTime > 0
+              // guarantees a real frame is on the plane before the still fades.
+              onTimeUpdate={() => {
+                if ((motionRef.current?.currentTime ?? 0) > 0) setMotionVisible(true);
+              }}
+              onWaiting={() => { void motionRef.current?.play().catch(() => {}); }}
+              onStalled={() => { void motionRef.current?.play().catch(() => {}); }}
               onEnded={endMotion}
               onError={() => setMotionOn(false)}
+            />
+          )}
+          {/* still sits ON TOP of the motion clip and fades OUT to reveal it,
+              so the opaque image always covers the video plane (no black flash
+              from webOS punching the hardware plane through a transparent
+              layer). */}
+          {imgSrc && (
+            <img
+              class={'fs-img' + (motionVisible ? ' motion-revealed' : '')}
+              src={imgSrc}
+              onLoad={() => setImgReady(true)}
             />
           )}
         </>

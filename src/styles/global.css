@@ -1223,6 +1223,10 @@ select {
 }
 /* Live Photo motion clip, layered over the still while it autoplays. Absolute
    so the still underneath shows through the instant it ends (motionOn -> false). */
+/* Live Photo motion clip plays UNDERNEATH the still (z-index 0). The still is
+   kept on top and fades out to reveal it, so an opaque layer always covers the
+   webOS hardware video plane — the plane is never exposed through a transparent
+   element, which is what caused the black flash / freeze-on-first-frame. */
 .fs-motion {
   position: absolute;
   top: 0;
@@ -1230,12 +1234,16 @@ select {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  opacity: 0; /* transparent until it has a frame (no black buffering flash) */
-  transition: opacity 450ms ease;
+  z-index: 0;
 }
-/* eased fade-in once playing / fade-out when the clip ends */
-.fs-motion.visible {
-  opacity: 1;
+/* still layered above the motion clip; fades out to reveal the playing video */
+.fs-img {
+  position: relative;
+  z-index: 1;
+  transition: opacity 600ms ease-in-out;
+}
+.fs-img.motion-revealed {
+  opacity: 0;
 }
 
 /* Centered indeterminate spinner while media loads. Byte-level progress isn't
@@ -1268,6 +1276,7 @@ select {
   right: 0;
   bottom: 0;
   left: 0;
+  z-index: 2; /* above the media layers (motion clip z0, still z1) */
   opacity: 0;
   transition: opacity 0.25s ease;
   pointer-events: none;
