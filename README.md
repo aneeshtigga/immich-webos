@@ -5,6 +5,22 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="https://github.com/aneeshtigga/immich-webos/releases/latest"><img src="https://img.shields.io/github/v/release/aneeshtigga/immich-webos?style=for-the-badge&logo=lg&label=release" alt="Latest release" /></a>
+  <a href="https://github.com/aneeshtigga/immich-webos/releases"><img src="https://img.shields.io/github/downloads/aneeshtigga/immich-webos/total?style=for-the-badge&label=downloads" alt="Total downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/aneeshtigga/immich-webos?style=for-the-badge" alt="License: MIT" /></a>
+  <img src="https://img.shields.io/badge/platform-webOS%205.0%2B-black?style=for-the-badge&logo=lg" alt="Platform: webOS 5.0+" />
+  <img src="https://img.shields.io/badge/built%20with-Preact-673ab8?style=for-the-badge&logo=preact&logoColor=white" alt="Built with Preact" />
+  <img src="https://img.shields.io/badge/TypeScript-3178c6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vite-646cff?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/aneeshtigga/immich-webos/stargazers"><img src="https://img.shields.io/github/stars/aneeshtigga/immich-webos?style=for-the-badge" alt="Stars" /></a>
+  <a href="https://github.com/aneeshtigga/immich-webos/issues"><img src="https://img.shields.io/github/issues/aneeshtigga/immich-webos?style=for-the-badge" alt="Open issues" /></a>
+  <a href="https://github.com/aneeshtigga/immich-webos/commits/main"><img src="https://img.shields.io/github/last-commit/aneeshtigga/immich-webos?style=for-the-badge" alt="Last commit" /></a>
+</p>
+
 A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch.
 
 > Unofficial, community-built app — not affiliated with the [Immich project](https://immich.app). "Immich" is a trademark of its owners.
@@ -19,6 +35,9 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 ---
 
 ## Requirements
+
+![webOS 5.0+](https://img.shields.io/badge/webOS-5.0%2B-black?style=for-the-badge&logo=lg)
+![Immich server](https://img.shields.io/badge/Immich-server-4250af?style=for-the-badge)
 
 - An [Immich](https://immich.app/) server you can reach from the TV
 - An LG TV running webOS 5.0 or above
@@ -118,6 +137,11 @@ permissions:
 
 ## Development
 
+![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=for-the-badge&logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178c6?style=for-the-badge&logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-5.4-646cff?style=for-the-badge&logo=vite&logoColor=white)
+![Preact](https://img.shields.io/badge/Preact-10-673ab8?style=for-the-badge&logo=preact&logoColor=white)
+
 ```bash
 npm install        # patch-package runs automatically via postinstall
 npm run dev        # Vite dev server at http://localhost:5173
@@ -180,4 +204,4 @@ npm run launch     # ares-launch the installed app
 
 ## License
 
-[MIT](LICENSE)
+[![License: MIT](https://img.shields.io/github/license/aneeshtigga/immich-webos?style=for-the-badge)](LICENSE)
