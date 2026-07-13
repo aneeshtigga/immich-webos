@@ -241,11 +241,19 @@ async function primeHeroes(collections: Collection[]): Promise<void> {
 }
 
 // ---- Hero carousel: crossfading previews of the focused collection ----
+// Only TWO <img> layers are ever mounted (not the whole set) so at most two 4K
+// framebuffers are decoded at once — the rest of the previews stay as cheap
+// compressed blobs. Rotating swaps the next preview into the hidden layer and
+// crossfades to it.
 function Hero({ collection }: { collection: Collection }) {
   const [, force] = useState(0);
   const [idx, setIdx] = useState(0);
   const st = heroState(collection.id);
   const srcs = st.loaded;
+
+  const [layers, setLayers] = useState<{ a: string | null; b: string | null }>({ a: null, b: null });
+  const [showA, setShowA] = useState(true);
+  const showARef = useRef(true);
 
   // re-render as this (or any) collection's cache grows
   useEffect(() => {
@@ -271,11 +279,20 @@ function Hero({ collection }: { collection: Collection }) {
     return () => window.clearInterval(t);
   }, [srcs.length]);
 
+  // crossfade to the current preview by loading it into the hidden layer
+  const curSrc = srcs[idx] ?? srcs[0] ?? null;
+  useEffect(() => {
+    if (!curSrc) return;
+    const toA = !showARef.current; // reveal via the currently-hidden layer
+    setLayers((prev) => (toA ? { a: curSrc, b: prev.b } : { a: prev.a, b: curSrc }));
+    showARef.current = toA;
+    setShowA(toA);
+  }, [curSrc]);
+
   return (
     <div class="wp-hero">
-      {srcs.map((s, i) => (
-        <img key={s} class={'wp-hero-img' + (i === idx ? ' on' : '')} src={s} />
-      ))}
+      {layers.a && <img class={'wp-hero-img' + (showA ? ' on' : '')} src={layers.a} decoding="async" />}
+      {layers.b && <img class={'wp-hero-img' + (!showA ? ' on' : '')} src={layers.b} decoding="async" />}
       <div class="wp-hero-scrim" />
       <div class="wp-hero-meta">
         <div class="wp-hero-kicker">

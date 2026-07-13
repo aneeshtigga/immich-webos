@@ -15,20 +15,22 @@ interface Props {
 }
 
 const HIDE_MS = 3000;
+const CAPTION_DELAY_MS = 1000; // location/date animate in this long after a transition
 const SPEEDS = [
+  { label: '10s', ms: 10000 },
   { label: '30s', ms: 30000 },
   { label: '1m', ms: 60000 },
   { label: '5m', ms: 300000 },
   { label: '10m', ms: 600000 },
 ];
-const DEFAULT_MS = SPEEDS[0].ms; // dwell per still
+const DEFAULT_MS = SPEEDS[1].ms; // dwell per still (30s)
 const GENRES = [
   { label: 'Ambient', tag: 'ambient' },
   { label: 'Lofi', tag: 'lofi' },
   { label: 'Jazz', tag: 'jazz' },
   { label: 'Classical', tag: 'classical' },
 ];
-const WINDOW = 5; // stills prefetched ahead at original quality
+const WINDOW = 3; // stills prefetched ahead at original quality (TV bandwidth/RAM)
 const VIDEO_STALL_MS = 8000; // skip a video that hasn't produced a frame by now
 const PREBUFFER_S = 5; // seconds of the NEXT video to pre-download
 
@@ -44,6 +46,7 @@ interface Cached {
   decoded: boolean;
   error?: boolean; // failed to load — advance past it
   el?: HTMLVideoElement; // for video: the buffering, reusable element
+  img?: HTMLImageElement; // for still: the fully-decoded, reusable <img> element
 }
 
 interface Frame {
@@ -51,6 +54,7 @@ interface Frame {
   asset: Asset;
   src: string;
   el?: HTMLVideoElement;
+  img?: HTMLImageElement;
 }
 
 // Fullscreen auto-advancing wallpaper slideshow. Stills crossfade every 8s at
@@ -61,15 +65,29 @@ interface Frame {
 // remote handler while this is up.
 export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
   const [i, setI] = useState(0);
-  const [stack, setStack] = useState<Frame[]>([]);
-  const [shownKey, setShownKey] = useState(0);
+  // Two persistent crossfade layers (A/B), exactly like the selection-page hero
+  // carousel that fades reliably. Each layer is a long-lived DOM node that sits
+  // at opacity 0; showing a frame drops it into the currently-hidden layer and
+  // flips `showA`, so the incoming layer transitions 0->1 from its already-
+  // painted 0 state. (A freshly-mounted node with a keyframe animation snapped
+  // in instead of fading on webOS's Chromium 79.)
+  const [layers, setLayers] = useState<{ a: Frame | null; b: Frame | null }>({ a: null, b: null });
+  const [showA, setShowA] = useState(true);
+  const showARef = useRef(true);
   const [paused, setPaused] = useState(false);
   const [overlay, setOverlay] = useState(true);
   // transient play/pause feedback pill, shown briefly on each toggle
   const [pill, setPill] = useState<'none' | 'paused' | 'playing'>('none');
   const pillTimer = useRef<number | undefined>(undefined);
-  // reverse-geocoded place for the current asset (date comes from the asset)
-  const [location, setLocation] = useState<string | null>(null);
+  // caption (place + date) committed together so a switch animates it ONCE.
+  // Date is on the asset immediately but the place is reverse-geocoded async;
+  // setting them separately re-keyed the caption twice (date now, place later)
+  // and it animated in twice. Commit both once the lookup resolves.
+  const [meta, setMeta] = useState<{ loc: string | null; date: string }>({ loc: null, date: '' });
+  // the asset of the frame currently ON SCREEN (in the visible layer). The caption
+  // keys off THIS, not the target index, so it only appears once the image has
+  // actually loaded and been revealed — never over a still-loading frame.
+  const [shownAsset, setShownAsset] = useState<Asset | null>(null);
   // slideshow speed for stills (videos advance on their own end)
   const [intervalMs, setIntervalMs] = useState(DEFAULT_MS);
   const intervalRef = useRef(DEFAULT_MS);
@@ -86,6 +104,10 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
   const bump = useCallback(() => setTick((t) => t + 1), []);
 
   const keyRef = useRef(0);
+  // off-screen full-screen container used to lay out + raster a decoded still at
+  // display size BEFORE it's shown, so the transition never hitches on a
+  // first-composite resize (see fitOnStage / loadInto).
+  const stageRef = useRef<HTMLDivElement>(null);
   const advanceTimer = useRef<number | undefined>(undefined);
   const hideTimer = useRef<number | undefined>(undefined);
   const iRef = useRef(0);
@@ -101,8 +123,31 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
   // a handful of full-res stills / buffering videos live in TV memory at once.
   const cache = useRef<Map<number, Cached>>(new Map());
 
-  const pushFrame = useCallback((f: Frame) => {
-    setStack((prev) => [...prev, f].slice(-2));
+  // Reveal a frame: put it in the hidden layer and flip which layer is shown, so
+  // the incoming layer crossfades in and the outgoing one fades out.
+  const showFrame = useCallback((f: Frame) => {
+    const toA = !showARef.current;
+    setLayers((prev) => (toA ? { a: f, b: prev.b } : { a: prev.a, b: f }));
+    showARef.current = toA;
+    setShowA(toA);
+  }, []);
+
+  // Mount a decoded <img> into the off-screen full-screen stage so the browser
+  // lays it out and RASTERS it at display size, then resolves after two frames
+  // (one to lay out, one to paint). The element is later reparented into the
+  // visible layer already fitted — the transition can't hitch on a resize. If
+  // the stage isn't mounted yet (first render), resolve immediately.
+  const fitOnStage = useCallback((img: HTMLImageElement): Promise<void> => {
+    return new Promise((res) => {
+      const stage = stageRef.current;
+      if (!stage) return res();
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      if (img.parentElement !== stage) stage.appendChild(img);
+      void img.offsetWidth; // force synchronous layout at full-screen size
+      requestAnimationFrame(() => requestAnimationFrame(() => res()));
+    });
   }, []);
 
   // Load one item into the cache. Stills: fetch original (HEIC/RAW fall back to
@@ -143,13 +188,28 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
 
       try {
         const src = await loadBlobUrl(originalUrl(a.id));
-        const e: Cached = { src, isVideo: false, blob: true, ready: true, decoded: true };
+        // Build and fully DECODE the actual <img> element before caching, then
+        // reuse THAT element on screen (mounted via ref, like videos). A still
+        // is "loaded" only once its real element can paint instantly. Decoding a
+        // throwaway Image wasn't enough: the rendered element re-decoded async
+        // and the fade reached full opacity over a still-blank layer = black pop.
+        let img: HTMLImageElement;
+        try {
+          img = await decodeStill(src);
+        } catch (decodeErr) {
+          revoke(src); // undecodable original (e.g. HEIC/RAW) — drop it, try preview
+          throw decodeErr;
+        }
+        await fitOnStage(img); // lay out + raster at full-screen before it's eligible
+        const e: Cached = { src, isVideo: false, blob: true, ready: true, decoded: true, img };
         cache.current.set(idx, e);
         return e;
       } catch {
         try {
           const src = await loadBlobUrl(thumbnailUrl(a.id, 'preview'));
-          const e: Cached = { src, isVideo: false, blob: true, ready: true, decoded: true };
+          const img = await decodeStill(src); // preview is always a browser-decodable JPEG
+          await fitOnStage(img);
+          const e: Cached = { src, isVideo: false, blob: true, ready: true, decoded: true, img };
           cache.current.set(idx, e);
           return e;
         } catch {
@@ -157,7 +217,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         }
       }
     },
-    [assets, bump],
+    [assets, bump, fitOnStage],
   );
 
   // Pre-download ~PREBUFFER_S of a NEIGHBOUR video, then back off so it doesn't
@@ -188,7 +248,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
     el.load();
   }, []);
 
-  // tear down a cached video element (stop buffering, release the network/decoder)
+  // tear down a cached element (release the blob, stop buffering, drop the DOM node)
   const teardown = (e: Cached) => {
     if (e.blob) revoke(e.src);
     if (e.el) {
@@ -197,6 +257,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
       e.el.load();
       e.el.remove();
     }
+    if (e.img) e.img.remove(); // pull the still off the stage / frame layer
   };
 
   // Drop cached items outside the [i-1, i+WINDOW] window.
@@ -275,7 +336,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         if (!alive) return;
         if (!e) return scheduleNext(500); // unloadable still — skip quickly
         if (!e.isVideo) {
-          pushFrame({ key, asset, src: e.src });
+          showFrame({ key, asset, src: e.src, img: e.img });
           scheduleNext(intervalRef.current); // stills auto-advance on a timer
           return;
         }
@@ -292,7 +353,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
           revealed = true;
           try { el.currentTime = 0; } catch { /* not seekable yet */ }
           if (!pausedRef.current) void el.play().catch(() => {});
-          pushFrame({ key, asset, src: e.src, el });
+          showFrame({ key, asset, src: e.src, el });
         };
         if (e.decoded) reveal();
         else {
@@ -338,32 +399,51 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [i, assets.length]);
 
-  // reverse-geocode the current asset for the bottom-left caption
+  // track which asset is actually on screen (the frame in the visible layer)
   useEffect(() => {
-    if (!asset) return;
+    const shown = showA ? layers.a : layers.b;
+    if (shown) setShownAsset(shown.asset);
+  }, [layers, showA]);
+
+  // Reverse-geocode the SHOWN asset and commit place+date together, once BOTH
+  // the lookup has resolved AND a short beat (CAPTION_DELAY_MS) has passed since
+  // the image was revealed. Keying on the shown asset (not the target index)
+  // guarantees the caption never fades in before its image is loaded. Committing
+  // the pair as one metaKey means the caption is keyed on its content: identical
+  // place+date reuses the DOM node and does NOT re-fade; only a genuine change
+  // remounts and fades in.
+  useEffect(() => {
+    if (!shownAsset) return;
     let alive = true;
-    // keep the previous caption until the new one resolves, so two shots from
-    // the same place don't flicker the key (and re-trigger the animation)
-    getAssetLocation(asset.id)
-      .then((loc) => {
-        if (!alive) return;
-        const parts = [loc.city, loc.state, loc.country].filter(Boolean) as string[];
+    const date = fmtDate(shownAsset.createdAt);
+    let loc: string | null = null;
+    let resolved = false;
+    let delayed = false;
+    const commit = () => {
+      if (alive && resolved && delayed) setMeta({ loc, date });
+    };
+    const t = window.setTimeout(() => {
+      delayed = true;
+      commit();
+    }, CAPTION_DELAY_MS);
+    getAssetLocation(shownAsset.id)
+      .then((r) => {
+        const parts = [r.city, r.state, r.country].filter(Boolean) as string[];
         const deduped = parts.filter((p, k) => p !== parts[k - 1]);
-        setLocation(deduped.length ? deduped.join(', ') : null);
+        loc = deduped.length ? deduped.join(', ') : null;
       })
-      .catch(() => {});
+      .catch(() => {
+        loc = null;
+      })
+      .finally(() => {
+        resolved = true;
+        commit();
+      });
     return () => {
       alive = false;
+      window.clearTimeout(t);
     };
-  }, [asset?.id]);
-
-  // fade the newest frame in on the next paint (starts at opacity 0)
-  useEffect(() => {
-    const top = stack[stack.length - 1];
-    if (!top) return;
-    const r = requestAnimationFrame(() => setShownKey(top.key));
-    return () => cancelAnimationFrame(r);
-  }, [stack]);
+  }, [shownAsset?.id]);
 
   // release everything held when the player unmounts
   useEffect(() => {
@@ -497,19 +577,25 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
 
   const cur = cache.current.get(i);
   const buffering = !!asset.isVideo && !(cur?.decoded);
-  const dateStr = fmtDate(asset.createdAt);
   // key on the caption CONTENT so it only re-animates when the text changes
   // (consecutive shots from the same place/day won't re-trigger the animation)
-  const metaKey = `${location ?? ''}|${dateStr}`;
+  const metaKey = `${meta.loc ?? ''}|${meta.date}`;
 
-  // mount the cached, already-buffering <video> element into its crossfade layer
-  // (reused so it never re-downloads or flashes black)
-  const mountVideo = (node: HTMLDivElement | null, f: Frame, isTop: boolean) => {
-    if (!node || !f.el) return;
-    if (f.el.parentElement !== node) node.appendChild(f.el);
-    // only the top (current) frame plays; the outgoing one freezes as it fades
-    if (isTop && !pausedRef.current) void f.el.play().catch(() => {});
-    else f.el.pause();
+  // Mount a frame's reused element (pre-decoded <img> or buffering <video>) as
+  // the sole child of a persistent crossfade layer. The element is reparented,
+  // never recreated, so it never re-decodes/re-downloads or flashes black. Only
+  // the visible layer's video plays; the outgoing one freezes as it fades.
+  const mountLayer = (node: HTMLDivElement | null, f: Frame | null, on: boolean) => {
+    if (!node) return;
+    const want = (f && (f.el || f.img)) || null;
+    if (node.firstChild !== want) {
+      while (node.firstChild) node.removeChild(node.firstChild); // detach prior element (still cached)
+      if (want) node.appendChild(want);
+    }
+    if (f?.el) {
+      if (on && !pausedRef.current) void f.el.play().catch(() => {});
+      else f.el.pause();
+    }
   };
 
   // Portal to <body>: rendered inside the shell's .view-enter, whose lingering
@@ -517,19 +603,18 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
   // the content box, leaving the sidebar visible instead of a true fullscreen.
   return createPortal(
     <div class={'wp-player ' + (overlay ? 'show-ui' : '')} onMouseMove={poke}>
-      {stack.map((f, idx) => {
-        // the frame below the top is already fully faded in; the top frame
-        // fades in once shownKey catches up to it.
-        const on = idx < stack.length - 1 || f.key === shownKey;
-        const cls = 'wp-frame' + (on ? ' on' : '');
-        return f.el ? (
+      {/* off-screen full-screen stage: stills are laid out + rastered here at
+          display size before they're shown, then reparented into a frame layer */}
+      <div class="wp-stage" ref={stageRef} />
+      {(['a', 'b'] as const).map((slot) => {
+        const f = layers[slot];
+        const on = (slot === 'a') === showA; // this layer is the visible one
+        return (
           <div
-            key={f.key}
-            class={cls + ' wp-vframe'}
-            ref={(node) => mountVideo(node, f, idx === stack.length - 1)}
+            key={slot}
+            class={'wp-frame' + (on ? ' on' : '')}
+            ref={(node) => mountLayer(node, f, on)}
           />
-        ) : (
-          <img key={f.key} class={cls} src={f.src} />
         );
       })}
 
@@ -540,10 +625,12 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
       )}
 
       {/* bottom-left caption, animates in fresh for each wallpaper (keyed by id) */}
-      <div class="wp-player-meta" key={metaKey}>
-        {location && <div class="wp-player-loc">{location}</div>}
-        {dateStr && <div class="wp-player-date">{dateStr}</div>}
-      </div>
+      {meta.date && (
+        <div class="wp-player-meta" key={metaKey}>
+          {meta.loc && <div class="wp-player-loc">{meta.loc}</div>}
+          {meta.date && <div class="wp-player-date">{meta.date}</div>}
+        </div>
+      )}
 
       <div class="wp-player-ui">
         <div class="wp-player-top">
@@ -612,6 +699,19 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
     </div>,
     document.body,
   );
+}
+
+// Build an <img> element and fully decode its bitmap off-screen, resolving with
+// the SAME element once it's ready to paint. The caller caches and mounts this
+// exact element, so it never re-decodes on screen. A decode REJECTION is
+// propagated (not swallowed): the byte fetch can succeed while the format is
+// undecodable on the TV (HEIC/RAW original), and the caller must fall back to
+// the preview JPEG rather than cache a broken element that renders black.
+function decodeStill(src: string): Promise<HTMLImageElement> {
+  const img = new Image();
+  img.src = src;
+  if (!img.decode) return Promise.resolve(img); // can't verify — assume paintable
+  return img.decode().then(() => img);
 }
 
 function fmtDate(iso: string): string {

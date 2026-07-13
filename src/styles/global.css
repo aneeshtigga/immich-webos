@@ -1602,6 +1602,7 @@ select {
   object-fit: cover;
   opacity: 0;
   transition: opacity 1.2s ease;
+  contain: layout paint; /* isolate paint of the full-screen layer */
 }
 .wp-hero-img.on {
   opacity: 1;
@@ -1725,22 +1726,49 @@ select {
   background: #000;
   overflow: hidden;
 }
+/* Two persistent crossfade layers. Each sits at opacity 0 and fades to 1 when
+   it becomes the shown layer (.on). Because the layer is long-lived and already
+   painted at 0, toggling .on always triggers a real opacity transition — the
+   same mechanism the selection-page hero carousel uses. (A freshly-mounted node
+   with a keyframe animation snapped in with no fade on webOS Chromium 79.) */
 .wp-frame {
   position: absolute;
-  inset: 0;
+  /* longhand offsets, NOT `inset`: webOS 6.x is Chromium 79 and `inset` landed
+     in Cr87 — the shorthand collapses the fixed frame to 0x0 there. */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   opacity: 0;
   transition: opacity 0.9s ease;
+  contain: layout paint; /* isolate paint of the full-screen frame */
 }
 .wp-frame.on {
   opacity: 1;
 }
-/* the reused <video> element mounted into a crossfade layer */
-.wp-vframe > video {
+/* Off-screen full-screen staging layer. Positioned out of view but NOT hidden
+   (no display:none / visibility:hidden / opacity:0 — those let the engine skip
+   raster), so a still mounted here is laid out and rastered at display size
+   before it's reparented into a visible frame. */
+.wp-stage {
+  position: fixed;
+  top: 0;
+  left: -200vw;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+/* the reused <video>/<img> element mounted into a crossfade layer */
+.wp-frame > video,
+.wp-frame > img {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1759,7 +1787,9 @@ select {
   bottom: 44px;
   z-index: 2;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
-  animation: wp-meta-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* opacity-only fade: no transform, so the blurred text-shadow never
+     re-rasters mid-animation (that was the TV stutter) */
+  animation: wp-meta-in 0.6s ease both;
 }
 .wp-player-loc {
   font-size: 26px;
@@ -1774,11 +1804,9 @@ select {
 @keyframes wp-meta-in {
   from {
     opacity: 0;
-    transform: translateX(28px);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
   }
 }
 .wp-player-ui {
@@ -1887,4 +1915,3 @@ select {
   color: #fff;
   font-size: 16px;
 }
-
