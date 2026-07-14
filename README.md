@@ -8,11 +8,7 @@
 <p align="center">
   <a href="https://github.com/aneeshtigga/immich-webos/releases"><img src="https://img.shields.io/github/downloads/aneeshtigga/immich-webos/total?style=for-the-badge&label=downloads&color=43a047&labelColor=ededed" alt="Total downloads" /></a>
   <a href="https://github.com/aneeshtigga/immich-webos/stargazers"><img src="https://img.shields.io/github/stars/aneeshtigga/immich-webos?style=for-the-badge&logo=github&logoColor=181717&color=181717&labelColor=ededed" alt="Stars" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/aneeshtigga/immich-webos?style=for-the-badge&color=3f51b5&labelColor=ededed" alt="License: MIT" /></a>
   <img src="https://img.shields.io/badge/platform-webOS%205.0%2B-a50034?style=for-the-badge&logo=lg&logoColor=a50034&labelColor=ededed" alt="Platform: webOS 5.0+" />
-  <img src="https://img.shields.io/badge/ui-Preact-673ab8?style=for-the-badge&logo=preact&logoColor=673ab8&labelColor=ededed" alt="Built with Preact" />
-  <img src="https://img.shields.io/badge/lang-TypeScript-3178c6?style=for-the-badge&logo=typescript&logoColor=3178c6&labelColor=ededed" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/build-Vite-646cff?style=for-the-badge&logo=vite&logoColor=646cff&labelColor=ededed" alt="Vite" />
 </p>
 
 A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch.
