@@ -1,6 +1,6 @@
 {
   "id": "com.immich.webos",
-  "version": "0.9.10",
+  "version": "0.9.11",
   "vendor": "self",
   "type": "web",
   "main": "index.html",
@@ -12,5 +12,8 @@
   "splashBackground": "splash.png",
   "disableBackHistoryAPI": true,
   "supportTouchMode": "none",
-  "requiredPermissions": ["time.query", "internet"]
+  "requiredPermissions": [
+    "time.query",
+    "internet"
+  ]
 }
