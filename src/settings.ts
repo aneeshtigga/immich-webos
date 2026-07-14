@@ -3,6 +3,7 @@
 
 const LIVE_PLAY_KEY = 'immich.livePlay';
 const VIDEO_QUALITY_KEY = 'immich.videoQuality';
+const SORT_KEY = 'immich.sort.';
 
 export type VideoQuality = 'transcoded' | 'original';
 
@@ -27,4 +28,20 @@ export function getLivePlay(): boolean {
 export function setLivePlay(on: boolean): void {
   if (on) localStorage.setItem(LIVE_PLAY_KEY, '1');
   else localStorage.removeItem(LIVE_PLAY_KEY);
+}
+
+// Per-section sort direction. 'desc' (newest first) is the default everywhere;
+// the user flips a section to 'asc' (oldest first) from its header sort button
+// and it sticks across restarts. Each browsable section stores independently so
+// e.g. albums can read oldest-first while the main timeline stays newest-first.
+export type SortDir = 'asc' | 'desc';
+export type SortSection = 'timeline' | 'favorites' | 'albums' | 'album';
+
+export function getSort(section: SortSection): SortDir {
+  return localStorage.getItem(SORT_KEY + section) === 'asc' ? 'asc' : 'desc';
+}
+
+export function setSort(section: SortSection, dir: SortDir): void {
+  if (dir === 'asc') localStorage.setItem(SORT_KEY + section, 'asc');
+  else localStorage.removeItem(SORT_KEY + section);
 }

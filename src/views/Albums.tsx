@@ -16,10 +16,12 @@ export function Albums({
   onOpenAlbum,
   restore,
   onRestored,
+  order = 'desc',
 }: {
   onOpenAlbum: (album: Album) => void;
   restore?: AlbumsRestore | null;
   onRestored?: () => void;
+  order?: 'asc' | 'desc';
 }) {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [error, setError] = useState('');
@@ -28,11 +30,16 @@ export function Albums({
   useEffect(() => {
     getAlbums()
       .then((a) =>
-        a.sort((x, y) => (y.endDate || '').localeCompare(x.endDate || '')),
+        // Sort by trip end date: 'desc' newest first, 'asc' oldest first so a
+        // trip browses in the order it happened.
+        a.sort((x, y) => {
+          const cmp = (x.endDate || '').localeCompare(y.endDate || '');
+          return order === 'asc' ? cmp : -cmp;
+        }),
       )
       .then(setAlbums)
       .catch((e) => setError(e?.message || 'Failed to load albums'));
-  }, []);
+  }, [order]);
 
   // After the list (re)loads, if we came back from an opened album, put the
   // scroll + focus back where they were rather than at the first card.

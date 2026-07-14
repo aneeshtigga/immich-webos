@@ -148,32 +148,44 @@ export async function validateToken(): Promise<boolean> {
 
 // --- Timeline ---
 
-// Default timeline query: own assets, newest first, exclude trashed.
-export async function getTimelineBuckets(): Promise<TimeBucket[]> {
-  return jsonReq<TimeBucket[]>('/timeline/buckets?isTrashed=false&order=desc');
+// Sort order passed to the timeline endpoints. 'desc' = newest first (default),
+// 'asc' = oldest first. Drives both the bucket list order and the asset order
+// within each bucket, so a whole section reads oldest-to-newest end to end.
+export type Order = 'asc' | 'desc';
+
+// Default timeline query: own assets, exclude trashed. Order defaults to newest
+// first; callers pass the user's saved per-section direction.
+export async function getTimelineBuckets(order: Order = 'desc'): Promise<TimeBucket[]> {
+  const q = new URLSearchParams({ isTrashed: 'false', order });
+  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q.toString());
 }
 
-export async function getBucket(timeBucket: string): Promise<BucketColumns> {
+export async function getBucket(
+  timeBucket: string,
+  order: Order = 'desc',
+): Promise<BucketColumns> {
   const q = new URLSearchParams({
     timeBucket,
     isTrashed: 'false',
-    order: 'desc',
+    order,
   });
   return jsonReq<BucketColumns>('/timeline/bucket?' + q.toString());
 }
 
-export async function getFavoriteBuckets(): Promise<TimeBucket[]> {
-  return jsonReq<TimeBucket[]>(
-    '/timeline/buckets?isTrashed=false&isFavorite=true&order=desc',
-  );
+export async function getFavoriteBuckets(order: Order = 'desc'): Promise<TimeBucket[]> {
+  const q = new URLSearchParams({ isTrashed: 'false', isFavorite: 'true', order });
+  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q.toString());
 }
 
-export async function getFavoriteBucket(timeBucket: string): Promise<BucketColumns> {
+export async function getFavoriteBucket(
+  timeBucket: string,
+  order: Order = 'desc',
+): Promise<BucketColumns> {
   const q = new URLSearchParams({
     timeBucket,
     isTrashed: 'false',
     isFavorite: 'true',
-    order: 'desc',
+    order,
   });
   return jsonReq<BucketColumns>('/timeline/bucket?' + q.toString());
 }
@@ -195,16 +207,20 @@ export async function getAlbums(): Promise<Album[]> {
 
 // Album assets reuse the timeline endpoints with an albumId filter — same
 // columnar shape, so the grid view is identical to the main timeline.
-export async function getAlbumBuckets(albumId: string): Promise<TimeBucket[]> {
-  const q = new URLSearchParams({ albumId, order: 'desc' });
+export async function getAlbumBuckets(
+  albumId: string,
+  order: Order = 'desc',
+): Promise<TimeBucket[]> {
+  const q = new URLSearchParams({ albumId, order });
   return jsonReq<TimeBucket[]>('/timeline/buckets?' + q.toString());
 }
 
 export async function getAlbumBucket(
   albumId: string,
   timeBucket: string,
+  order: Order = 'desc',
 ): Promise<BucketColumns> {
-  const q = new URLSearchParams({ albumId, timeBucket, order: 'desc' });
+  const q = new URLSearchParams({ albumId, timeBucket, order });
   return jsonReq<BucketColumns>('/timeline/bucket?' + q.toString());
 }
 

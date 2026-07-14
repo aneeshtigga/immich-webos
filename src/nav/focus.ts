@@ -330,6 +330,28 @@ export function nextInDirection(dir: Direction): HTMLElement | null {
     return null;
   }
 
+  // Header controls (album Back + the sort toggle) sit at opposite ends of the
+  // same top row with the grid between/below them, so pure geometry scores a
+  // near grid thumbnail over the far-across sibling. Pair them explicitly:
+  // left/right hops straight to the other header button by screen-x. Falls
+  // through when there's no header button in that direction (so Left from the
+  // leftmost still reaches the grid / reveals the sidebar).
+  if (active.hasAttribute('data-header-nav') && (dir === 'left' || dir === 'right')) {
+    const ax = center(active.getBoundingClientRect()).x;
+    let hit: HTMLElement | null = null;
+    let hitD = Infinity;
+    for (const el of list) {
+      if (el === active || !el.hasAttribute('data-header-nav') || !visible(el)) continue;
+      const dx = center(el.getBoundingClientRect()).x - ax;
+      const d = dir === 'left' ? -dx : dx;
+      if (d > 1 && d < hitD) {
+        hitD = d;
+        hit = el;
+      }
+    }
+    if (hit) return hit;
+  }
+
   // Sidebar and content are separate nav zones; you only cross between them via
   // the left-edge reveal / right-edge collapse (handled in useRemote's onEdge),
   // never by geometric scoring. So:
