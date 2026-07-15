@@ -18,7 +18,7 @@ interface Props {
 
 type Quality = 'transcoded' | 'original';
 const SEEK_STEP = 10; // seconds
-const HIDE_MS = 3000;
+const HIDE_MS = 5000;
 
 // Unified fullscreen viewer for photos and videos with an auto-hiding overlay.
 //
@@ -123,12 +123,11 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     (forceShow = true) => {
       if (forceShow) setOverlay(true);
       window.clearTimeout(hideTimer.current);
-      // only auto-hide while a video is actively playing
-      if (isVideo && !paused) {
-        hideTimer.current = window.setTimeout(() => setOverlay(false), HIDE_MS);
-      }
+      // auto-hide after inactivity for both photos and videos; any interaction
+      // (pointer move, key, seek) re-shows it and restarts the countdown.
+      hideTimer.current = window.setTimeout(() => setOverlay(false), HIDE_MS);
     },
-    [isVideo, paused],
+    [],
   );
 
   useEffect(() => {
