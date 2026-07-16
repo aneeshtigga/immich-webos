@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import { Asset } from '../api/assets';
 import { loadBlobUrl, revoke } from '../api/media';
-import { thumbnailUrl, videoStreamUrl, originalUrl, getAssetLocation } from '../api/client';
+import { thumbnailUrl, videoStreamUrl, originalUrl, getAssetLocation, getAssetFaces, FaceBox } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { fetchStations, Station } from '../api/radio';
 import { Icon } from '../components/Icon';
@@ -181,7 +181,11 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         el.setAttribute('muted', '');
         const e: Cached = { src: el.src, isVideo: true, blob: false, ready: false, decoded: false, el };
         cache.current.set(idx, e);
-        el.addEventListener('loadedmetadata', () => { e.ready = true; bump(); }, { once: true });
+        el.addEventListener('loadedmetadata', () => {
+          e.ready = true;
+          bump();
+          void aimAtFaces(el, a.id); // keep faces in the cover crop
+        }, { once: true });
         el.addEventListener('loadeddata', () => { e.decoded = true; bump(); }, { once: true });
         el.addEventListener('ended', () => { if (iRef.current === idx) advanceRef.current(); });
         el.addEventListener('waiting', () => { if (!pausedRef.current) void el.play().catch(() => {}); });
@@ -209,6 +213,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
           revoke(src); // undecodable original (e.g. HEIC/RAW) — drop it, try preview
           throw decodeErr;
         }
+        await aimAtFaces(img, a.id); // aim the cover crop BEFORE the stage raster
         await fitOnStage(img); // lay out + raster at full-screen before it's eligible
         const e: Cached = { src, isVideo: false, blob: true, ready: true, decoded: true, img };
         cache.current.set(idx, e);
@@ -217,6 +222,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         try {
           const src = await loadBlobUrl(thumbnailUrl(a.id, 'preview'));
           const img = await decodeStill(src); // preview is always a browser-decodable JPEG
+          await aimAtFaces(img, a.id);
           await fitOnStage(img);
           const e: Cached = { src, isVideo: false, blob: true, ready: true, decoded: true, img };
           cache.current.set(idx, e);
@@ -746,6 +752,51 @@ function decodeStill(src: string): Promise<HTMLImageElement> {
   img.src = src;
   if (!img.decode) return Promise.resolve(img); // can't verify — assume paintable
   return img.decode().then(() => img);
+}
+
+// --- face-aware cover crop ---
+// object-fit:cover crops the axis that overflows the screen; object-position
+// picks WHICH slice survives. Solve for the position that puts the center of
+// the detected faces at the screen's focal point (horizontal center, and 38%
+// from the top — roughly the rule-of-thirds eye line), clamped to 0..100% so
+// the image always still fills the screen. Returns null for "keep the default
+// center crop" (no faces, no overflow, or the math lands on center anyway).
+const FACE_FOCUS_Y = 0.38;
+function faceObjectPosition(w: number, h: number, faces: FaceBox[]): string | null {
+  if (!faces.length || !w || !h) return null;
+  // ignore small background faces (crowds, passers-by): keep only faces at
+  // least 30% of the area of the largest one, then take the union box
+  const area = (f: FaceBox) => Math.max(0, f.x2 - f.x1) * Math.max(0, f.y2 - f.y1);
+  const biggest = Math.max(...faces.map(area));
+  const kept = faces.filter((f) => area(f) >= biggest * 0.3);
+  if (!kept.length) return null;
+  const cx = (Math.min(...kept.map((f) => f.x1)) + Math.max(...kept.map((f) => f.x2))) / 2;
+  const cy = (Math.min(...kept.map((f) => f.y1)) + Math.max(...kept.map((f) => f.y2))) / 2;
+  const sw = window.innerWidth || 1280;
+  const sh = window.innerHeight || 720;
+  const scale = Math.max(sw / w, sh / h);
+  const dw = w * scale; // image size once cover-scaled
+  const dh = h * scale;
+  const clamp = (v: number) => Math.max(0, Math.min(100, v));
+  let px = 50;
+  let py = 50;
+  // object-position P%: image offset = (screen - scaled) * P/100. Solving
+  // "face center lands on the focal point" for P gives the expressions below;
+  // clamping keeps the crop window inside the image (never a gap).
+  if (dw - sw > 1) px = clamp(((cx * dw - sw * 0.5) / (dw - sw)) * 100);
+  if (dh - sh > 1) py = clamp(((cy * dh - sh * FACE_FOCUS_Y) / (dh - sh)) * 100);
+  if (Math.abs(px - 50) < 0.5 && Math.abs(py - 50) < 0.5) return null;
+  return `${px.toFixed(2)}% ${py.toFixed(2)}%`;
+}
+
+// Fetch the asset's detected faces and aim the element's cover crop at them.
+// No-op (default center crop) when there are none.
+async function aimAtFaces(el: HTMLImageElement | HTMLVideoElement, id: string): Promise<void> {
+  const faces = await getAssetFaces(id); // never throws; [] on failure
+  const w = el instanceof HTMLVideoElement ? el.videoWidth : el.naturalWidth;
+  const h = el instanceof HTMLVideoElement ? el.videoHeight : el.naturalHeight;
+  const pos = faceObjectPosition(w, h, faces);
+  if (pos) el.style.objectPosition = pos;
 }
 
 function fmtDate(iso: string): string {
