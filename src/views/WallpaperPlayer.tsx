@@ -125,7 +125,16 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
 
   // Reveal a frame: put it in the hidden layer and flip which layer is shown, so
   // the incoming layer crossfades in and the outgoing one fades out.
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
   const showFrame = useCallback((f: Frame) => {
+    // GUARD: never re-show an element that's already in the VISIBLE layer.
+    // Each media element exists once; mountLayer reparents with appendChild, so
+    // putting the same element into the hidden layer would STEAL it from the
+    // visible one — the screen goes black while the incoming layer fades up.
+    const visible = showARef.current ? layersRef.current.a : layersRef.current.b;
+    const el = f.el || f.img;
+    if (el && visible && (visible.el || visible.img) === el) return;
     const toA = !showARef.current;
     setLayers((prev) => (toA ? { a: f, b: prev.b } : { a: prev.a, b: f }));
     showARef.current = toA;
@@ -346,25 +355,43 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         const el = e.el!;
         el.preload = 'auto';
         if (e.error) return scheduleNext(0); // failed — advance past
-        void el.play().catch(() => {}); // muted; kicks buffering + decode
         let revealed = false;
         const reveal = () => {
           if (revealed || !alive) return;
           revealed = true;
-          try { el.currentTime = 0; } catch { /* not seekable yet */ }
+          // Start playback, then crossfade the element in only once a frame has
+          // ACTUALLY been composited. Revealing on 'loadeddata'/'canplay' alone
+          // reparents an element whose surface hasn't painted yet, so it fades in
+          // black and stays black until a re-mount (a manual nav) forces a paint.
+          // requestVideoFrameCallback fires on the first presented frame (Chrome);
+          // Cr79 lacks it, so fall back to two rAFs after play() begins.
+          const present = () => { if (alive) showFrame({ key, asset, src: e.src, el }); };
           if (!pausedRef.current) void el.play().catch(() => {});
-          showFrame({ key, asset, src: e.src, el });
+          const rvfc = (el as unknown as {
+            requestVideoFrameCallback?: (cb: () => void) => number;
+          }).requestVideoFrameCallback;
+          if (rvfc) rvfc.call(el, () => present());
+          else requestAnimationFrame(() => requestAnimationFrame(present));
         };
         if (e.decoded) reveal();
         else {
           el.addEventListener('loadeddata', reveal, { once: true });
           el.addEventListener('canplay', reveal, { once: true });
         }
-        // watchdog: a video that never produces a frame gets skipped, so a
-        // stuck/black clip can't stall the slideshow forever
-        stallTimer = window.setTimeout(() => {
-          if (alive && (el.currentTime || 0) === 0) scheduleNext(0);
-        }, VIDEO_STALL_MS);
+        // watchdog: forward auto-advance rides on the 'ended' event, so a clip
+        // that never starts OR freezes mid-playback (buffer stall) would hang the
+        // show forever ('ended' never fires). Poll the playback position: while
+        // playing, if it stops advancing for VIDEO_STALL_MS, skip to the next.
+        let lastT = -1;
+        let strikes = 0;
+        const ticks = Math.max(1, Math.round(VIDEO_STALL_MS / 2000));
+        stallTimer = window.setInterval(() => {
+          if (!alive || iRef.current !== i) return;
+          if (pausedRef.current) { lastT = -1; return; } // don't skip a paused clip
+          const t = el.currentTime || 0;
+          if (t > lastT) { lastT = t; strikes = 0; return; }
+          if (++strikes >= ticks) { window.clearInterval(stallTimer); scheduleNext(0); }
+        }, 2000);
       })
       .catch(() => alive && scheduleNext(500));
 
@@ -387,7 +414,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
 
     return () => {
       alive = false;
-      window.clearTimeout(stallTimer);
+      window.clearInterval(stallTimer);
       // pause the outgoing video and demote it back to metadata-only so it stops
       // buffering while it's just a neighbour again
       const out = cache.current.get(i)?.el;
@@ -396,8 +423,15 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         out.preload = 'metadata';
       }
     };
+    // NOTE: keyed on the index and the identity of the asset AT that index —
+    // NOT assets.length. onNearEnd appends to the live list, and a length dep
+    // re-ran this whole effect at the SAME index: the second showFrame moved
+    // the already-visible element into the other layer (appendChild = steal),
+    // blacking out the screen. Deterministically hit the same photos (the ones
+    // on screen when a bucket load landed). asset?.id covers the one case a
+    // re-run IS wanted: assets[i] itself changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [i, assets.length]);
+  }, [i, asset?.id]);
 
   // track which asset is actually on screen (the frame in the visible layer)
   useEffect(() => {
