@@ -17,8 +17,11 @@ interface Collection {
   filter: (a: Asset) => boolean;
 }
 
+// No combined photos+videos collection: videos play with their ORIGINAL audio
+// (webOS has a single hardware media pipeline, so background music and video
+// can't decode at once — see WallpaperPlayer), and mixing silent stills with
+// full-audio clips made for a jarring show.
 const COLLECTIONS: Collection[] = [
-  { id: 'all', label: 'All Photos & Videos', hint: 'Everything in your library', icon: 'photos', filter: () => true },
   { id: 'photos', label: 'Photos', hint: 'Images only', icon: 'wallpaper', type: 'IMAGE', filter: (a) => a.isImage },
   { id: 'videos', label: 'Videos', hint: 'Videos only', icon: 'playCircle', type: 'VIDEO', filter: (a) => a.isVideo },
 ];
@@ -37,6 +40,7 @@ interface Props {
 export function Wallpaper({ backRef, onFullscreen }: Props) {
   const [focused, setFocused] = useState<Collection>(COLLECTIONS[0]);
   const [player, setPlayer] = useState<Asset[] | null>(null);
+  const [playerMode, setPlayerMode] = useState<'photos' | 'videos'>('photos');
   const [preparing, setPreparing] = useState<Collection | null>(null);
   const homeRef = useRef<HTMLDivElement>(null);
   // bumped to cancel an in-flight prepare (Back pressed while preparing)
@@ -109,6 +113,7 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
 
   const openCollection = async (c: Collection) => {
     const token = ++prepToken.current;
+    setPlayerMode(c.id === 'videos' ? 'videos' : 'photos');
     setPreparing(c);
     const buckets = await getTimelineBuckets().catch(() => [] as TimeBucket[]);
     if (prepToken.current !== token) return; // cancelled via Back
@@ -144,7 +149,7 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
       )}
 
       {player && (
-        <WallpaperPlayer assets={player} onExit={() => setPlayer(null)} onNearEnd={loadMore} />
+        <WallpaperPlayer assets={player} mode={playerMode} onExit={() => setPlayer(null)} onNearEnd={loadMore} />
       )}
     </div>
   );

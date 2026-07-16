@@ -9,6 +9,12 @@ import { Icon } from '../components/Icon';
 
 interface Props {
   assets: Asset[];
+  // 'photos': muted stills slideshow with the dwell-speed + background-music
+  // controls. 'videos': clips play with their ORIGINAL audio, and the speed +
+  // music controls are hidden (webOS has one hardware media pipeline — a
+  // radio stream and a video can't decode at the same time, the video plane
+  // just goes black).
+  mode: 'photos' | 'videos';
   onExit: () => void;
   // called when nearing the end of the loaded list so more buckets can load
   onNearEnd?: () => void;
@@ -63,7 +69,7 @@ interface Frame {
 // only moves to an item whose media is loaded — never onto a black/unready
 // frame. Loops forever. Owns its own key listener; the shell disables its
 // remote handler while this is up.
-export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
+export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
   const [i, setI] = useState(0);
   // Two persistent crossfade layers (A/B), exactly like the selection-page hero
   // carousel that fades reliably. Each layer is a long-lived DOM node that sits
@@ -116,6 +122,18 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
   pausedRef.current = paused;
   // latest "advance forward" fn, so video element listeners never go stale
   const advanceRef = useRef<() => void>(() => {});
+
+  // play() with an autoplay-policy fallback: an UNMUTED play can be rejected
+  // (desktop dev without a fresh gesture) — degrade that clip to muted rather
+  // than letting it sit black until the stall watchdog skips it.
+  const playEl = useCallback((el: HTMLVideoElement) => {
+    void el.play().catch(() => {
+      if (!el.muted) {
+        el.muted = true;
+        void el.play().catch(() => {});
+      }
+    });
+  }, []);
 
   const asset = assets[i];
 
@@ -172,23 +190,25 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
       if (a.isVideo) {
         const el = document.createElement('video');
         el.src = videoStreamUrl(a.id);
-        el.muted = true;
+        // videos mode plays clips with their original audio; photos mode keeps
+        // any interleaved video muted (there shouldn't be one, but stay safe)
+        el.muted = mode !== 'videos';
         el.playsInline = true;
         // only metadata while it's a lookahead/behind; promoted to 'auto' when
         // it becomes the current clip (keeps at most one clip fully buffering).
         el.preload = 'metadata';
         el.setAttribute('playsinline', '');
-        el.setAttribute('muted', '');
+        if (el.muted) el.setAttribute('muted', '');
         const e: Cached = { src: el.src, isVideo: true, blob: false, ready: false, decoded: false, el };
         cache.current.set(idx, e);
-        el.addEventListener('loadedmetadata', () => {
-          e.ready = true;
-          bump();
-          void aimAtFaces(el, a.id); // keep faces in the cover crop
-        }, { once: true });
+        // NOTE: no aimAtFaces on videos. webOS composites <video> on its own
+        // hardware plane; a non-center object-position breaks the hole-punch
+        // and the video renders black (fine on desktop). Face boxes for videos
+        // are also detected on the thumbnail, so the data is unreliable anyway.
+        el.addEventListener('loadedmetadata', () => { e.ready = true; bump(); }, { once: true });
         el.addEventListener('loadeddata', () => { e.decoded = true; bump(); }, { once: true });
         el.addEventListener('ended', () => { if (iRef.current === idx) advanceRef.current(); });
-        el.addEventListener('waiting', () => { if (!pausedRef.current) void el.play().catch(() => {}); });
+        el.addEventListener('waiting', () => { if (!pausedRef.current) playEl(el); });
         el.addEventListener('error', () => {
           e.ready = true; // let nav move onto it so it can be skipped
           e.error = true;
@@ -232,7 +252,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         }
       }
     },
-    [assets, bump, fitOnStage],
+    [assets, bump, fitOnStage, mode, playEl],
   );
 
   // Pre-download ~PREBUFFER_S of a NEIGHBOUR video, then back off so it doesn't
@@ -365,19 +385,14 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
         const reveal = () => {
           if (revealed || !alive) return;
           revealed = true;
-          // Start playback, then crossfade the element in only once a frame has
-          // ACTUALLY been composited. Revealing on 'loadeddata'/'canplay' alone
-          // reparents an element whose surface hasn't painted yet, so it fades in
-          // black and stays black until a re-mount (a manual nav) forces a paint.
-          // requestVideoFrameCallback fires on the first presented frame (Chrome);
-          // Cr79 lacks it, so fall back to two rAFs after play() begins.
-          const present = () => { if (alive) showFrame({ key, asset, src: e.src, el }); };
-          if (!pausedRef.current) void el.play().catch(() => {});
-          const rvfc = (el as unknown as {
-            requestVideoFrameCallback?: (cb: () => void) => number;
-          }).requestVideoFrameCallback;
-          if (rvfc) rvfc.call(el, () => present());
-          else requestAnimationFrame(() => requestAnimationFrame(present));
+          // Attach + play IMMEDIATELY on the first decodable frame. webOS runs
+          // <video> through a hardware pipeline that expects the element to be
+          // in the DOM — deferring the reparent until after play() begins (an
+          // earlier requestVideoFrameCallback/rAF scheme) left the TV's video
+          // plane black. The earlier black frames this deferral chased were the
+          // element-steal bug, fixed properly in showFrame/the show effect.
+          if (!pausedRef.current) playEl(el);
+          showFrame({ key, asset, src: e.src, el });
         };
         if (e.decoded) reveal();
         else {
@@ -504,11 +519,11 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
       window.clearTimeout(advanceTimer.current);
       cur?.el?.pause();
     } else if (cur?.isVideo) {
-      void cur.el?.play().catch(() => {});
+      if (cur.el) playEl(cur.el);
     } else {
       scheduleNext(intervalRef.current);
     }
-  }, [paused, scheduleNext]);
+  }, [paused, scheduleNext, playEl]);
 
   // changing the speed while a still is showing restarts its timer at the new rate
   useEffect(() => {
@@ -633,7 +648,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
       if (want) node.appendChild(want);
     }
     if (f?.el) {
-      if (on && !pausedRef.current) void f.el.play().catch(() => {});
+      if (on && !pausedRef.current) playEl(f.el);
       else f.el.pause();
     }
   };
@@ -680,7 +695,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
               {pill === 'paused' ? 'Paused' : 'Playing'}
             </span>
           )}
-          <div class="wp-music">
+          {mode === 'photos' && <div class="wp-music">
             {musicOn && (
               <div class="wp-speed">
                 {GENRES.map((g) => (
@@ -709,20 +724,22 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
             >
               <Icon name="music" size={22} />
             </button>
-          </div>
-          <div class="wp-speed">
-            {SPEEDS.map((s) => (
-              <button
-                key={s.ms}
-                class={'wp-speed-btn' + (s.ms === intervalMs ? ' active' : '')}
-                onClick={() => { setIntervalMs(s.ms); poke(); }}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
+          </div>}
+          {mode === 'photos' && (
+            <div class="wp-speed">
+              {SPEEDS.map((s) => (
+                <button
+                  key={s.ms}
+                  class={'wp-speed-btn' + (s.ms === intervalMs ? ' active' : '')}
+                  onClick={() => { setIntervalMs(s.ms); poke(); }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
-        <audio
+        {mode === 'photos' && <audio
           ref={audioRef}
           onError={nextStation}
           // a muted video can still steal audio focus on webOS and pause the
@@ -734,7 +751,7 @@ export function WallpaperPlayer({ assets, onExit, onNearEnd }: Props) {
               }, 400);
             }
           }}
-        />
+        />}
       </div>
     </div>,
     document.body,
@@ -789,13 +806,12 @@ function faceObjectPosition(w: number, h: number, faces: FaceBox[]): string | nu
   return `${px.toFixed(2)}% ${py.toFixed(2)}%`;
 }
 
-// Fetch the asset's detected faces and aim the element's cover crop at them.
-// No-op (default center crop) when there are none.
-async function aimAtFaces(el: HTMLImageElement | HTMLVideoElement, id: string): Promise<void> {
+// Fetch the asset's detected faces and aim the still's cover crop at them.
+// No-op (default center crop) when there are none. Stills only — see the note
+// in loadInto for why videos keep the center crop on webOS.
+async function aimAtFaces(el: HTMLImageElement, id: string): Promise<void> {
   const faces = await getAssetFaces(id); // never throws; [] on failure
-  const w = el instanceof HTMLVideoElement ? el.videoWidth : el.naturalWidth;
-  const h = el instanceof HTMLVideoElement ? el.videoHeight : el.naturalHeight;
-  const pos = faceObjectPosition(w, h, faces);
+  const pos = faceObjectPosition(el.naturalWidth, el.naturalHeight, faces);
   if (pos) el.style.objectPosition = pos;
 }
 
