@@ -90,6 +90,11 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
   // setting them separately re-keyed the caption twice (date now, place later)
   // and it animated in twice. Commit both once the lookup resolves.
   const [meta, setMeta] = useState<{ loc: string | null; date: string }>({ loc: null, date: '' });
+  const metaRef = useRef<{ loc: string | null; date: string }>({ loc: null, date: '' });
+  metaRef.current = meta;
+  // pre-geocoded results keyed by asset id so transitions can compare old vs new
+  // meta before the new image shows, clearing the caption only when it changes.
+  const geoCache = useRef(new Map<string, { loc: string | null; date: string }>());
   // the asset of the frame currently ON SCREEN (in the visible layer). The caption
   // keys off THIS, not the target index, so it only appears once the image has
   // actually loaded and been revealed — never over a still-loading frame.
@@ -358,6 +363,18 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
   );
   advanceRef.current = () => scheduleNext(0);
 
+  const prefetchGeoFor = useCallback((a: Asset) => {
+    if (geoCache.current.has(a.id)) return;
+    const date = fmtDate(a.createdAt);
+    getAssetLocation(a.id)
+      .then((r) => {
+        const parts = [r.city, r.state, r.country].filter(Boolean) as string[];
+        const deduped = parts.filter((p, k) => p !== parts[k - 1]);
+        geoCache.current.set(a.id, { loc: deduped.length ? deduped.join(', ') : null, date });
+      })
+      .catch(() => { geoCache.current.set(a.id, { loc: null, date }); });
+  }, []);
+
   // load + show the current asset, prefetch ahead, evict the rest
   useEffect(() => {
     if (!asset) return;
@@ -420,6 +437,7 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
     // are heavy to buffer — one lookahead is enough to keep nav unblocked)
     let vids = 0;
     for (let k = i + 1; k <= i + WINDOW && k < assets.length; k++) {
+      void prefetchGeoFor(assets[k]);
       if (assets[k].isVideo) {
         if (vids < 1) {
           const idx = k;
@@ -471,29 +489,40 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
     if (!shownAsset) return;
     let alive = true;
     const date = fmtDate(shownAsset.createdAt);
+
+    const cached = geoCache.current.get(shownAsset.id);
+    if (cached) {
+      // We already know the new meta. Clear the old caption now only when the
+      // content is actually changing — same place/date stays visible throughout.
+      const newKey = `${cached.loc ?? ''}|${cached.date}`;
+      const curKey = `${metaRef.current.loc ?? ''}|${metaRef.current.date}`;
+      if (newKey !== curKey) setMeta({ loc: null, date: '' });
+      const t = window.setTimeout(() => { if (alive) setMeta(cached); }, CAPTION_DELAY_MS);
+      return () => { alive = false; window.clearTimeout(t); };
+    }
+
+    // Not pre-geocoded yet — clear immediately (unknown whether same or different)
+    // and run the lookup now, caching the result for future transitions.
+    setMeta({ loc: null, date: '' });
     let loc: string | null = null;
     let resolved = false;
     let delayed = false;
     const commit = () => {
-      if (alive && resolved && delayed) setMeta({ loc, date });
+      if (alive && resolved && delayed) {
+        const result = { loc, date };
+        geoCache.current.set(shownAsset.id, result);
+        setMeta(result);
+      }
     };
-    const t = window.setTimeout(() => {
-      delayed = true;
-      commit();
-    }, CAPTION_DELAY_MS);
+    const t = window.setTimeout(() => { delayed = true; commit(); }, CAPTION_DELAY_MS);
     getAssetLocation(shownAsset.id)
       .then((r) => {
         const parts = [r.city, r.state, r.country].filter(Boolean) as string[];
         const deduped = parts.filter((p, k) => p !== parts[k - 1]);
         loc = deduped.length ? deduped.join(', ') : null;
       })
-      .catch(() => {
-        loc = null;
-      })
-      .finally(() => {
-        resolved = true;
-        commit();
-      });
+      .catch(() => { loc = null; })
+      .finally(() => { resolved = true; commit(); });
     return () => {
       alive = false;
       window.clearTimeout(t);
