@@ -82,8 +82,11 @@ ares-install --device <your-device> com.immich.webos.ipk
     </td>
   </tr>
   <tr>
-    <td colspan="2" align="center">
-      <img src="screenshots/wallpaper.png" alt="Fullscreen wallpaper slideshow" width="100%">
+    <td width="50%" align="center">
+      <img src="screenshots/wallpaper.png" alt="Wallpaper source picker" width="100%">
+    </td>
+    <td width="50%" align="center">
+      <img src="screenshots/wallpaper-player.png" alt="Wallpaper slideshow playing with control bar" width="100%">
     </td>
   </tr>
 </table>
