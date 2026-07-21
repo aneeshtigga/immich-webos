@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/platform-webOS%205.0%2B-a50034?style=for-the-badge&logo=lg&logoColor=a50034&labelColor=ededed" alt="Platform: webOS 5.0+" />
 </p>
 
-A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch.
+A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [Immich](https://immich.app/) photo and video server from the couch, with a fullscreen wallpaper slideshow to turn the TV into an ambient photo frame.
 
 > Unofficial, community-built app — not affiliated with the [Immich project](https://immich.app). "Immich" is a trademark of its owners.
 
@@ -79,6 +79,11 @@ ares-install --device <your-device> com.immich.webos.ipk
     </td>
     <td width="50%" align="center">
       <img src="screenshots/albums.png" alt="Album browser" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="screenshots/wallpaper.png" alt="Fullscreen wallpaper slideshow" width="100%">
     </td>
   </tr>
 </table>
