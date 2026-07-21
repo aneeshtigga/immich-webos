@@ -1,6 +1,6 @@
 {
   "name": "immich-webos",
-  "version": "0.9.12",
+  "version": "0.10.0",
   "description": "Native webOS TV app for browsing an Immich photo/video server",
   "private": true,
   "license": "MIT",
