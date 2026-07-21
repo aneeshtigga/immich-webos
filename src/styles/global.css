@@ -103,6 +103,39 @@ select {
 .msg.error {
   color: #ff6b6b;
 }
+/* centered empty-state: broken logo + title + fix hint */
+.empty-state {
+  /* longhand offsets, NOT `inset`: webOS 6.x (Cr79) collapses the shorthand */
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  text-align: center;
+}
+.empty-state-logo {
+  width: 168px;
+  height: auto;
+  /* the art fades to a dark shadow over the lower ~72px of the box (invisible on
+     black); pull the title up under the visible art, leaving a small gap */
+  margin-bottom: -60px;
+}
+.empty-state-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+.empty-state-hint {
+  font-size: 19px;
+  color: var(--muted);
+  max-width: 520px;
+}
 
 /* ---------- Splash ---------- */
 .splash {
@@ -1605,3 +1638,355 @@ select {
   margin: 0;
 }
 
+/* ---------- Wallpaper ---------- */
+/* The wallpaper page runs full-bleed to the left screen edge so the hero sits
+   BEHIND the floating rail (Apple-TV style). The rail overlays it; the shelf
+   below is indented to clear the rail. */
+.content.wallpaper {
+  left: 0;
+}
+.wp {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Hero: crossfading full-bleed previews of the focused collection */
+.wp-hero {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+.wp-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  contain: layout paint; /* isolate paint of the full-screen layer */
+}
+.wp-hero-img.on {
+  opacity: 1;
+}
+.wp-hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(10, 10, 10, 0.85) 0%,
+    rgba(10, 10, 10, 0.5) 35%,
+    rgba(10, 10, 10, 0) 70%
+  );
+}
+.wp-hero-meta {
+  position: absolute;
+  left: 142px; /* clear the floating rail (14 margin + 76 rail + ~52 inset) */
+  bottom: 40px;
+  max-width: 60%;
+}
+.wp-hero-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--immich-dark-primary);
+}
+.wp-hero-title {
+  font-size: 52px;
+  font-weight: 800;
+  margin: 10px 0 6px;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+}
+.wp-hero-hint {
+  font-size: 20px;
+  color: rgba(229, 231, 235, 0.85);
+  margin: 0;
+}
+/* Shelf of collection tiles */
+.wp-shelf {
+  flex: 0 0 auto;
+  padding: 22px 48px 40px 142px; /* left inset clears the floating rail */
+}
+.wp-shelf-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  color: var(--fg);
+}
+.wp-tiles {
+  display: flex;
+  gap: 18px;
+}
+.wp-tile {
+  position: relative;
+  width: 340px;
+  aspect-ratio: 16 / 9;
+  border: none;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.wp-tile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* pointer hover feedback without stealing the focus ring */
+.wp-tile:hover:not(:focus) {
+  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
+}
+.wp-tile-grad {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 55%);
+}
+.wp-tile-label {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 19px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* "Preparing…" overlay while a collection's assets are gathered */
+.wp-prep {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(10, 10, 10, 0.72);
+}
+.wp-prep-text {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+/* Fullscreen slideshow player */
+.wp-player {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* above the fullscreen viewer (50) and sidebar */
+  background: #000;
+  overflow: hidden;
+}
+/* Two persistent crossfade layers. opacity/z-index/transition are set INLINE
+   per layer in the render map: the current frame snaps opaque underneath while
+   the OUTGOING frame fades out on top. (A 0->1 fade-in was unreliable on webOS
+   Cr79 — a layer parked at opacity 0 may never be rastered, so the transition
+   snaps; the outgoing layer is always painted, so its 1->0 always animates.) */
+.wp-frame {
+  position: absolute;
+  /* longhand offsets, NOT `inset`: webOS 6.x is Chromium 79 and `inset` landed
+     in Cr87 — the shorthand collapses the fixed frame to 0x0 there. */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  contain: layout paint; /* isolate paint of the full-screen frame */
+}
+/* Off-screen full-screen staging layer. Positioned out of view but NOT hidden
+   (no display:none / visibility:hidden / opacity:0 — those let the engine skip
+   raster), so a still mounted here is laid out and rastered at display size
+   before it's reparented into a visible frame. */
+.wp-stage {
+  position: fixed;
+  top: 0;
+  left: -200vw;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+/* the reused <video>/<img> element mounted into a crossfade layer */
+.wp-frame > video,
+.wp-frame > img {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.wp-player-spin {
+  position: absolute;
+  inset: 0;
+  z-index: 3; /* above both crossfade layers (current z1, outgoing z2) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* bottom-left date + location caption, animates in per wallpaper */
+.wp-player-meta {
+  position: absolute;
+  left: 48px;
+  bottom: 44px;
+  z-index: 3; /* above both crossfade layers (current z1, outgoing z2) */
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+  /* opacity-only fade: no transform, so the blurred text-shadow never
+     re-rasters mid-animation (that was the TV stutter) */
+  animation: wp-meta-in 0.6s ease both;
+}
+.wp-player-loc {
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+}
+.wp-player-date {
+  font-size: 19px;
+  color: rgba(229, 231, 235, 0.9);
+  margin-top: 3px;
+}
+@keyframes wp-meta-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.wp-player-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 3; /* above both crossfade layers (current z1, outgoing z2) */
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.wp-player.show-ui .wp-player-ui {
+  opacity: 1;
+}
+.wp-player-ui > * {
+  pointer-events: auto;
+}
+.wp-player-top {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 28px 32px;
+}
+/* background-music control, sits left of the speed selector */
+.wp-music {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* genre selector floats above the music button, only while the bar is focused */
+.wp-genres {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+}
+.wp-music-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+.wp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+.wp-icon-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}
+.wp-icon-btn.active {
+  color: #0a0a0a;
+  background: var(--immich-dark-primary);
+}
+/* speed selector, top-right */
+.wp-speed {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+}
+.wp-speed-btn {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.wp-speed-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}
+.wp-speed-btn.active {
+  color: #0a0a0a;
+  background: var(--immich-dark-primary);
+}
+/* d-pad focus ring on the option bar (Up raises + focuses the bar) */
+.wp-player-top .wp-icon-btn:focus,
+.wp-player-top .wp-speed-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--immich-dark-primary);
+}
+.wp-player-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+.wp-player-count {
+  position: absolute;
+  right: 32px;
+  bottom: 28px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 16px;
+}

@@ -234,6 +234,7 @@ interface AssetResponseDto {
   width?: number;
   height?: number;
   livePhotoVideoId?: string | null;
+  thumbhash?: string | null; // null when no thumbnail has been generated yet
   exifInfo?: { exifImageWidth?: number; exifImageHeight?: number };
 }
 
@@ -249,6 +250,7 @@ function mapAsset(a: AssetResponseDto): import('./assets').Asset {
     ratio: h > 0 ? w / h : 1,
     createdAt: a.fileCreatedAt || '',
     livePhotoVideoId: a.livePhotoVideoId ?? null,
+    thumbhash: a.thumbhash ?? null,
   };
 }
 
@@ -270,6 +272,14 @@ async function metadataSearch(
     { method: 'POST', body: JSON.stringify(body) },
   );
   return res.assets.items.map(mapAsset);
+}
+
+// Assets by type (IMAGE/VIDEO), newest first. One request, so sparse types
+// (e.g. videos) return quickly instead of walking the whole timeline.
+export async function searchByType(
+  type?: 'IMAGE' | 'VIDEO',
+): Promise<import('./assets').Asset[]> {
+  return metadataSearch(type ? { type } : {});
 }
 
 // --- People ---
@@ -353,6 +363,49 @@ export async function getAssetLocation(id: string): Promise<AssetLocation> {
   };
   locationCache.set(id, loc);
   return loc;
+}
+
+// Detected-face bounding box, normalized to 0..1 of the image. Immich reports
+// boxes against the (smaller) image its ML pipeline processed, so they must be
+// divided by the imageWidth/imageHeight in the response, not the original dims.
+export interface FaceBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+const faceCache = new Map<string, FaceBox[]>();
+
+// All detected faces for an asset (named or not), normalized. Empty array when
+// there are none or the lookup fails — callers fall back to a center crop.
+export async function getAssetFaces(id: string): Promise<FaceBox[]> {
+  if (faceCache.has(id)) return faceCache.get(id)!;
+  let boxes: FaceBox[] = [];
+  try {
+    const faces = await jsonReq<
+      {
+        boundingBoxX1: number;
+        boundingBoxY1: number;
+        boundingBoxX2: number;
+        boundingBoxY2: number;
+        imageWidth: number;
+        imageHeight: number;
+      }[]
+    >(`/faces?id=${id}`);
+    boxes = faces
+      .filter((f) => f.imageWidth > 0 && f.imageHeight > 0)
+      .map((f) => ({
+        x1: f.boundingBoxX1 / f.imageWidth,
+        y1: f.boundingBoxY1 / f.imageHeight,
+        x2: f.boundingBoxX2 / f.imageWidth,
+        y2: f.boundingBoxY2 / f.imageHeight,
+      }));
+  } catch {
+    /* no faces / endpoint unavailable — center crop */
+  }
+  faceCache.set(id, boxes);
+  return boxes;
 }
 
 export function thumbnailUrl(id: string, size: 'thumbnail' | 'preview' = 'thumbnail'): string {
