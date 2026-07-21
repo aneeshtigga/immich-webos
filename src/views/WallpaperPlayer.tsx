@@ -25,11 +25,11 @@ interface Props {
 }
 
 const HIDE_MS = 3000;
+const BAR_IDLE_MS = 8000; // hide the focused bar after this long with no input
 const CAPTION_DELAY_MS = 1000; // location/date animate in this long after a transition
 const SPEEDS = [
   { label: '10s', ms: 10000 },
   { label: '30s', ms: 30000 },
-  { label: '1m', ms: 60000 },
   { label: '5m', ms: 300000 },
   { label: '10m', ms: 600000 },
 ];
@@ -108,6 +108,9 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
   const focusBarRef = useRef(false);
   focusBarRef.current = focusBar;
   const barRef = useRef<HTMLDivElement>(null);
+  // true while d-pad focus sits on the music button or one of its genre pills;
+  // gates the genre popover so it only shows when the music control is focused
+  const [musicFocus, setMusicFocus] = useState(false);
   // transient play/pause feedback pill, shown briefly on each toggle
   const [pill, setPill] = useState<'none' | 'paused' | 'playing'>('none');
   const pillTimer = useRef<number | undefined>(undefined);
@@ -656,30 +659,55 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
   const poke = useCallback(() => {
     setOverlay(true);
     window.clearTimeout(hideTimer.current);
-    if (focusBarRef.current) return; // pinned open while the bar has d-pad focus
+    if (focusBarRef.current) {
+      // focused but idle: after a longer window, hide the bar AND drop focus
+      hideTimer.current = window.setTimeout(() => {
+        setFocusBar(false);
+        focusBarRef.current = false;
+        (document.activeElement as HTMLElement | null)?.blur();
+        setOverlay(false);
+      }, BAR_IDLE_MS);
+      return;
+    }
     hideTimer.current = window.setTimeout(() => setOverlay(false), HIDE_MS);
   }, []);
 
-  // Move d-pad focus among the option-bar buttons (live query — the button set
-  // changes with mode and whether music is on). Wraps at both ends.
-  const focusBarBtn = useCallback((delta: number) => {
-    const btns = Array.from(barRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+  // Walk a live list of buttons, wrapping at both ends, moving focus by `delta`.
+  const walk = (btns: HTMLButtonElement[], delta: number) => {
     if (!btns.length) return;
     const cur = btns.indexOf(document.activeElement as HTMLButtonElement);
     const next = cur < 0 ? 0 : (cur + delta + btns.length) % btns.length;
     btns[next].focus();
+  };
+  // bottom-row buttons (genre pills live in a popover ABOVE, walked separately)
+  const barBtns = () =>
+    Array.from(barRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []).filter(
+      (b) => !b.closest('.wp-genres'),
+    );
+  const genreBtns = () =>
+    Array.from(barRef.current?.querySelectorAll<HTMLButtonElement>('.wp-genres button') ?? []);
+  // Move d-pad focus among the option-bar buttons (live query — the button set
+  // changes with mode and whether music is on). Wraps at both ends.
+  const focusBarBtn = useCallback((delta: number) => walk(barBtns(), delta), []);
+  const focusGenreBtn = useCallback((delta: number) => walk(genreBtns(), delta), []);
+  const focusMusicBtn = useCallback(() => {
+    barRef.current
+      ?.querySelector<HTMLButtonElement>('button[title="Background music"]')
+      ?.focus();
   }, []);
 
   const enterBar = useCallback(() => {
     setFocusBar(true);
+    focusBarRef.current = true; // sync: poke() below arms the focused-idle timer
     setOverlay(true);
-    window.clearTimeout(hideTimer.current);
     // focus the first button after the overlay has painted
     requestAnimationFrame(() => focusBarBtn(1));
-  }, [focusBarBtn]);
+    poke(); // arm the 8s idle-hide (resets on every subsequent key)
+  }, [focusBarBtn, poke]);
 
   const leaveBar = useCallback(() => {
     setFocusBar(false);
+    focusBarRef.current = false; // sync: poke() below reads the ref, not state
     (document.activeElement as HTMLElement | null)?.blur();
     poke();
   }, [poke]);
@@ -753,21 +781,45 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
       poke();
       const dir = dirFromKey(code);
 
-      // options bar has focus: d-pad walks the buttons; Down/Back drop back to
-      // the photo track (Back does NOT exit the player here)
+      // options bar has focus. Two rows: the bottom button row, and the genre
+      // popover ABOVE the music button. Up from the music button climbs into the
+      // genres; Down drops back; Down again (from the bottom row) exits the bar.
       if (focusBarRef.current) {
+        const active = document.activeElement as HTMLElement | null;
+        const inGenres = !!active?.closest('.wp-genres');
+        if (inGenres) {
+          if (dir === 'left') {
+            e.preventDefault();
+            focusGenreBtn(-1);
+          } else if (dir === 'right') {
+            e.preventDefault();
+            focusGenreBtn(1);
+          } else if (dir === 'down' || isBack(code)) {
+            e.preventDefault();
+            focusMusicBtn();
+          } else if (code === Key.Enter) {
+            e.preventDefault();
+            active?.click();
+          }
+          return;
+        }
         if (dir === 'left') {
           e.preventDefault();
           focusBarBtn(-1);
         } else if (dir === 'right') {
           e.preventDefault();
           focusBarBtn(1);
+        } else if (dir === 'up') {
+          // on any music control (toggle or next-station) with the genre popover
+          // open: climb into it
+          e.preventDefault();
+          if (active?.closest('.wp-music') && genreBtns().length) focusGenreBtn(1);
         } else if (dir === 'down' || isBack(code)) {
           e.preventDefault();
           leaveBar();
         } else if (code === Key.Enter) {
           e.preventDefault();
-          (document.activeElement as HTMLElement | null)?.click();
+          active?.click();
         }
         return;
       }
@@ -797,7 +849,7 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [advance, onExit, poke, flashPill, enterBar, leaveBar, focusBarBtn]);
+  }, [advance, onExit, poke, flashPill, enterBar, leaveBar, focusBarBtn, focusGenreBtn, focusMusicBtn]);
 
   if (!asset) return null;
 
@@ -885,16 +937,15 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
               {pill === 'paused' ? 'Paused' : 'Playing'}
             </span>
           )}
-          <button
-            class={'wp-icon-btn' + (shuffle ? ' active' : '')}
-            onClick={() => { toggleShuffle(); poke(); }}
-            title="Shuffle"
+          {mode === 'photos' && <div
+            class="wp-music"
+            onFocus={() => setMusicFocus(true)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setMusicFocus(false);
+            }}
           >
-            <Icon name="shuffle" size={22} />
-          </button>
-          {mode === 'photos' && <div class="wp-music">
-            {musicOn && (
-              <div class="wp-speed">
+            {musicOn && musicFocus && (
+              <div class="wp-genres wp-speed">
                 {GENRES.map((g) => (
                   <button
                     key={g.tag}
@@ -935,6 +986,13 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
               ))}
             </div>
           )}
+          <button
+            class={'wp-icon-btn' + (mode === 'videos' ? ' wp-shuffle' : '') + (shuffle ? ' active' : '')}
+            onClick={() => { toggleShuffle(); poke(); }}
+            title="Shuffle"
+          >
+            <Icon name="shuffle" size={22} />
+          </button>
         </div>
         {mode === 'photos' && <audio
           ref={audioRef}
