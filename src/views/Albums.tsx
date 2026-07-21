@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { getAlbums, Album } from '../api/client';
 import { loadThumb } from '../api/media';
 import { focus } from '../nav/focus';
+import { EmptyState } from '../components/EmptyState';
 
 // Where the list was when the user opened an album, so returning restores the
 // scroll position + focus instead of jumping back to the top.
@@ -22,6 +23,7 @@ export function Albums({
   onRestored?: () => void;
 }) {
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [fetched, setFetched] = useState(false);
   const [error, setError] = useState('');
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -31,7 +33,8 @@ export function Albums({
         a.sort((x, y) => (y.endDate || '').localeCompare(x.endDate || '')),
       )
       .then(setAlbums)
-      .catch((e) => setError(e?.message || 'Failed to load albums'));
+      .catch((e) => setError(e?.message || 'Failed to load albums'))
+      .finally(() => setFetched(true));
   }, []);
 
   // After the list (re)loads, if we came back from an opened album, put the
@@ -51,7 +54,16 @@ export function Albums({
   }, [albums, restore]);
 
   if (error) return <div class="msg error">{error}</div>;
-  if (!albums.length) return <div class="msg">No albums yet.</div>;
+  if (!albums.length) {
+    return fetched ? (
+      <EmptyState
+        title="No albums yet"
+        hint="Create an album in the Immich mobile or web app and it'll show up here."
+      />
+    ) : (
+      <div class="msg">Loading…</div>
+    );
+  }
 
   return (
     <div class="album-grid" ref={gridRef}>

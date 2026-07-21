@@ -6,6 +6,7 @@ import { Thumb } from './Thumb';
 import { bucketObserver, setLazyRoot } from './lazyObserver';
 import { justify, targetRowHeight, GRID_GAP as GAP } from './justified';
 import { reportError } from './ErrorBoundary';
+import { EmptyState } from './EmptyState';
 
 const DAY_SEP = 5; // px gap inserted between day-groups on a shared row
 const MIN_LABEL_WIDTH = 230; // min px between consecutive day labels (prevents collision)
@@ -19,6 +20,9 @@ interface Props {
   loadNextUnloaded?: { current: (() => void) | null };
   // called whenever the flat asset list grows (new bucket loaded)
   onAssetsChange?: (assets: Asset[]) => void;
+  // shown (centered, with the broken logo) when the bucket list loads empty
+  emptyLabel?: string;
+  emptyHint?: string;
 }
 
 // Date-bucketed, justified-row photo grid (Immich timeline look). Buckets load
@@ -30,8 +34,9 @@ interface Props {
 // re-renders ONLY that section — not all N previously loaded sections. Without
 // this the grid did O(N) justify()+vnode work on every bucket load, which is
 // why the UI degraded the longer you scrolled.
-export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, onAssetsChange }: Props) {
+export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, onAssetsChange, emptyLabel, emptyHint }: Props) {
   const [buckets, setBuckets] = useState<TimeBucket[]>([]);
+  const [fetched, setFetched] = useState(false); // bucket list resolved (may be empty)
   const [loaded, setLoaded] = useState<Record<string, Asset[]>>({});
   const [error, setError] = useState('');
   const [width, setWidth] = useState(window.innerWidth - 96 - 32);
@@ -64,9 +69,11 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
   }
 
   useEffect(() => {
+    setFetched(false);
     loadBuckets()
       .then(setBuckets)
-      .catch((e) => setError(e?.message || 'Failed to load timeline'));
+      .catch((e) => setError(e?.message || 'Failed to load timeline'))
+      .finally(() => setFetched(true));
   }, [loadBuckets]);
 
   useEffect(() => {
@@ -128,7 +135,13 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
   offsetRef.current = offsetOf;
 
   if (error) return <div class="msg error">{error}</div>;
-  if (!buckets.length) return <div class="msg">Loading…</div>;
+  if (!buckets.length) {
+    return fetched ? (
+      <EmptyState title={emptyLabel ?? 'Nothing here yet'} hint={emptyHint} />
+    ) : (
+      <div class="msg">Loading…</div>
+    );
+  }
 
   return (
     <div

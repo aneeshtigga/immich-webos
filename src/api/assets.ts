@@ -15,6 +15,7 @@ export interface Asset {
   // null when the server hasn't generated a thumbnail yet — such assets 404 on
   // the thumbnail/preview endpoints, so callers can skip them.
   thumbhash?: string | null;
+  isFavorite?: boolean; // weights the wallpaper shuffle toward favorites
 }
 
 export function flattenBucket(b: BucketColumns): Asset[] {
@@ -40,6 +41,7 @@ export function flattenBucket(b: BucketColumns): Asset[] {
       createdAt: b.fileCreatedAt ? b.fileCreatedAt[i] : '',
       livePhotoVideoId: b.livePhotoVideoId?.[i] ?? null,
       thumbhash: b.thumbhash?.[i] ?? null,
+      isFavorite: b.isFavorite?.[i] ?? false,
     });
   }
   return out;

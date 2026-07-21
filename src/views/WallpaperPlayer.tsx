@@ -1,11 +1,12 @@
-import { useEffect, useState, useRef, useCallback } from 'preact/hooks';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import { Asset } from '../api/assets';
 import { loadBlobUrl, revoke } from '../api/media';
-import { thumbnailUrl, videoStreamUrl, originalUrl, getAssetLocation, getAssetFaces, FaceBox } from '../api/client';
+import { thumbnailUrl, videoStreamUrl, originalUrl, getAssetLocation } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { fetchStations, Station } from '../api/radio';
 import { Icon } from '../components/Icon';
+import { aimAtFaces } from './faceCrop';
 
 interface Props {
   assets: Asset[];
@@ -18,6 +19,9 @@ interface Props {
   onExit: () => void;
   // called when nearing the end of the loaded list so more buckets can load
   onNearEnd?: () => void;
+  // called when the user toggles shuffle. The feed randomizes its remaining
+  // bucket order so shuffle spans the whole library, not just the loaded page.
+  onShuffleChange?: (on: boolean) => void;
 }
 
 const HIDE_MS = 3000;
@@ -69,19 +73,41 @@ interface Frame {
 // only moves to an item whose media is loaded — never onto a black/unready
 // frame. Loops forever. Owns its own key listener; the shell disables its
 // remote handler while this is up.
-export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
+export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, onShuffleChange }: Props) {
   const [i, setI] = useState(0);
-  // Two persistent crossfade layers (A/B), exactly like the selection-page hero
-  // carousel that fades reliably. Each layer is a long-lived DOM node that sits
-  // at opacity 0; showing a frame drops it into the currently-hidden layer and
-  // flips `showA`, so the incoming layer transitions 0->1 from its already-
-  // painted 0 state. (A freshly-mounted node with a keyframe animation snapped
-  // in instead of fading on webOS's Chromium 79.)
+  // Play order: `order` is a permutation of indices into assetsProp; `assets`
+  // (used everywhere below) is the sequenced list the show walks. Sequential
+  // by default (identity order); shuffle rebuilds it as a random permutation.
+  // Keeping playback consecutive over `assets` preserves the prefetch window,
+  // eviction, and near-end paging unchanged — only the mapping changes.
+  const [shuffle, setShuffle] = useState(false);
+  const shuffleRef = useRef(false);
+  shuffleRef.current = shuffle;
+  const [order, setOrder] = useState<number[]>(() => assetsProp.map((_, k) => k));
+  const assets = useMemo(() => order.map((k) => assetsProp[k]).filter(Boolean), [order, assetsProp]);
+  // Two persistent crossfade layers (A/B), long-lived DOM nodes that media
+  // elements are reparented into (never recreated, so no re-decode). Showing a
+  // frame drops it into the currently-hidden layer and flips `showA`; the new
+  // current layer snaps opaque UNDERNEATH while the outgoing layer fades OUT on
+  // top (see the render map for why fade-out, not fade-in, on webOS Cr79).
   const [layers, setLayers] = useState<{ a: Frame | null; b: Frame | null }>({ a: null, b: null });
   const [showA, setShowA] = useState(true);
   const showARef = useRef(true);
+  // false = the outgoing layer still COVERS (opaque, no transition); true = its
+  // 1->0 fade is running. Flipped true two painted frames after each showFrame
+  // so the incoming frame's raster stall happens while covered — starting the
+  // fade in the same commit let a long raster (big 4K originals) eat the whole
+  // 0.9s transition window (transitions are timestamp-based) and pop.
+  const [fading, setFading] = useState(false);
+  const fadeRaf = useRef(0);
   const [paused, setPaused] = useState(false);
   const [overlay, setOverlay] = useState(true);
+  // when true, d-pad drives the options bar (left/right between buttons, Enter
+  // activates) instead of the photo track. Entered with Up, left with Down/Back.
+  const [focusBar, setFocusBar] = useState(false);
+  const focusBarRef = useRef(false);
+  focusBarRef.current = focusBar;
+  const barRef = useRef<HTMLDivElement>(null);
   // transient play/pause feedback pill, shown briefly on each toggle
   const [pill, setPill] = useState<'none' | 'paused' | 'playing'>('none');
   const pillTimer = useRef<number | undefined>(undefined);
@@ -159,9 +185,19 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
     const el = f.el || f.img;
     if (el && visible && (visible.el || visible.img) === el) return;
     const toA = !showARef.current;
+    // Flip commit: the incoming layer snaps visible underneath (attach + play
+    // immediately — play() on a hidden/detached video blacks the TV's hardware
+    // video plane) while the outgoing layer stays OPAQUE on top, covering the
+    // incoming frame's first layout/raster. Two painted frames later, start the
+    // outgoing 1->0 fade (see `fading`).
+    window.cancelAnimationFrame(fadeRaf.current);
     setLayers((prev) => (toA ? { a: f, b: prev.b } : { a: prev.a, b: f }));
     showARef.current = toA;
     setShowA(toA);
+    setFading(false);
+    fadeRaf.current = requestAnimationFrame(() => {
+      fadeRaf.current = requestAnimationFrame(() => setFading(true));
+    });
   }, []);
 
   // Mount a decoded <img> into the off-screen full-screen stage so the browser
@@ -300,15 +336,49 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
     if (e.img) e.img.remove(); // pull the still off the stage / frame layer
   };
 
-  // Drop cached items outside the [i-1, i+WINDOW] window.
+  // Drop cached items outside the [i-2, i+WINDOW] window. Two behind (not one)
+  // so a couple of Left presses land instantly instead of re-fetching originals.
   const evict = useCallback((center: number) => {
     for (const [idx, e] of cache.current) {
-      if (idx < center - 1 || idx > center + WINDOW) {
+      if (idx < center - 2 || idx > center + WINDOW) {
         teardown(e);
         cache.current.delete(idx);
       }
     }
   }, []);
+
+  // drop every cached element (used when the play order is rebuilt — cache is
+  // keyed by position in `assets`, which the reorder invalidates)
+  const clearCache = useCallback(() => {
+    for (const [, e] of cache.current) teardown(e);
+    cache.current.clear();
+  }, []);
+
+  // Keep `order` covering every asset. onNearEnd appends to the live list, so
+  // when it grows, tack the new indices on the end (shuffled among themselves
+  // when shuffle is on). Existing positions keep their mapping — the cache and
+  // current index stay valid, no reload.
+  useEffect(() => {
+    setOrder((prev) => {
+      if (prev.length >= assetsProp.length) return prev;
+      const added: number[] = [];
+      for (let k = prev.length; k < assetsProp.length; k++) added.push(k);
+      if (shuffleRef.current) weightedShuffle(added, (k) => (assetsProp[k]?.isFavorite ? FAV_WEIGHT : 1));
+      return [...prev, ...added];
+    });
+  }, [assetsProp.length]);
+
+  // Toggle shuffle: rebuild the whole order, reset the cache, restart at 0.
+  const toggleShuffle = useCallback(() => {
+    const next = !shuffleRef.current;
+    const ids = assetsProp.map((_, k) => k);
+    if (next) weightedShuffle(ids, (k) => (assetsProp[k]?.isFavorite ? FAV_WEIGHT : 1));
+    clearCache();
+    setShuffle(next);
+    setOrder(ids);
+    setI(0);
+    onShuffleChange?.(next); // widen the bound: feed randomizes remaining buckets
+  }, [assetsProp, clearCache, onShuffleChange]);
 
   // An index is navigable only once its media is loaded: a still's blob is ready,
   // or a video has decoded its first frame (or errored, so it can be skipped).
@@ -333,17 +403,39 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
     [assets.length],
   );
 
-  // Move by delta, but ONLY if the target is loaded. If not, stay put and kick
-  // off its load (never jump to — or wrap onto — an unloaded/black frame).
+  // Move by delta, but ONLY onto a loaded frame (never a black/unready one).
+  // Auto-advance (manual=false): if the target isn't loaded, kick its load and
+  // report false so the caller's retry loop polls again. Manual d-pad presses
+  // (manual=true) FOLLOW THROUGH instead: remember the intent, show the
+  // spinner, and jump as soon as the load lands — a press is never silently
+  // dropped (that read as a dead remote on the TV, where an original takes
+  // seconds to fetch + decode). A newer press supersedes a pending one.
+  const navToken = useRef(0);
+  const [navPending, setNavPending] = useState(false);
   const advance = useCallback(
-    (delta: number) => {
+    (delta: number, manual = false) => {
       const n = targetIndex(delta);
+      navToken.current++; // supersede any pending manual nav
       if (isLoaded(n)) {
+        setNavPending(false);
         window.clearTimeout(advanceTimer.current);
         setI(n);
         return true;
       }
-      void loadInto(n);
+      if (!manual) {
+        void loadInto(n);
+        return false;
+      }
+      const token = navToken.current;
+      setNavPending(true);
+      // stop the auto-advance timer so a dwell tick can't steal this intent
+      window.clearTimeout(advanceTimer.current);
+      void loadInto(n).then(() => {
+        if (navToken.current !== token) return; // a newer press took over
+        setNavPending(false);
+        if (isLoaded(n)) setI(n);
+        else advanceRef.current(); // unloadable target — resume the show
+      });
       return false;
     },
     [targetIndex, isLoaded, loadInto],
@@ -564,8 +656,33 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
   const poke = useCallback(() => {
     setOverlay(true);
     window.clearTimeout(hideTimer.current);
+    if (focusBarRef.current) return; // pinned open while the bar has d-pad focus
     hideTimer.current = window.setTimeout(() => setOverlay(false), HIDE_MS);
   }, []);
+
+  // Move d-pad focus among the option-bar buttons (live query — the button set
+  // changes with mode and whether music is on). Wraps at both ends.
+  const focusBarBtn = useCallback((delta: number) => {
+    const btns = Array.from(barRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+    if (!btns.length) return;
+    const cur = btns.indexOf(document.activeElement as HTMLButtonElement);
+    const next = cur < 0 ? 0 : (cur + delta + btns.length) % btns.length;
+    btns[next].focus();
+  }, []);
+
+  const enterBar = useCallback(() => {
+    setFocusBar(true);
+    setOverlay(true);
+    window.clearTimeout(hideTimer.current);
+    // focus the first button after the overlay has painted
+    requestAnimationFrame(() => focusBarBtn(1));
+  }, [focusBarBtn]);
+
+  const leaveBar = useCallback(() => {
+    setFocusBar(false);
+    (document.activeElement as HTMLElement | null)?.blur();
+    poke();
+  }, [poke]);
 
   const flashPill = useCallback((mode: 'paused' | 'playing') => {
     setPill(mode);
@@ -619,6 +736,8 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
 
   // stop music when the player closes
   useEffect(() => () => audioRef.current?.pause(), []);
+  // cancel a pending fade kick-off when the player closes
+  useEffect(() => () => window.cancelAnimationFrame(fadeRaf.current), []);
 
   // show the overlay briefly at start; afterwards it appears only on interaction
   // (key / pointer), never on an automatic photo change
@@ -632,18 +751,41 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
     const onKey = (e: KeyboardEvent) => {
       const code = e.keyCode;
       poke();
+      const dir = dirFromKey(code);
+
+      // options bar has focus: d-pad walks the buttons; Down/Back drop back to
+      // the photo track (Back does NOT exit the player here)
+      if (focusBarRef.current) {
+        if (dir === 'left') {
+          e.preventDefault();
+          focusBarBtn(-1);
+        } else if (dir === 'right') {
+          e.preventDefault();
+          focusBarBtn(1);
+        } else if (dir === 'down' || isBack(code)) {
+          e.preventDefault();
+          leaveBar();
+        } else if (code === Key.Enter) {
+          e.preventDefault();
+          (document.activeElement as HTMLElement | null)?.click();
+        }
+        return;
+      }
+
       if (isBack(code)) {
         e.preventDefault();
         onExit();
         return;
       }
-      const dir = dirFromKey(code);
-      if (dir === 'left') {
+      if (dir === 'up') {
         e.preventDefault();
-        advance(-1); // no-op until the previous frame is loaded
+        enterBar(); // raise + focus the options bar
+      } else if (dir === 'left') {
+        e.preventDefault();
+        advance(-1, true); // follows through once the previous frame loads
       } else if (dir === 'right') {
         e.preventDefault();
-        advance(1); // no-op until the next frame is loaded
+        advance(1, true); // follows through once the next frame loads
       } else if (code === Key.Enter || code === Key.PlayPause) {
         e.preventDefault();
         setPaused((p) => {
@@ -655,12 +797,14 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [advance, onExit, poke, flashPill]);
+  }, [advance, onExit, poke, flashPill, enterBar, leaveBar, focusBarBtn]);
 
   if (!asset) return null;
 
   const cur = cache.current.get(i);
-  const buffering = !!asset.isVideo && !(cur?.decoded);
+  // spinner: current video still decoding, or a manual d-pad nav waiting on its
+  // target frame to load (the press is acknowledged, not dropped)
+  const buffering = (!!asset.isVideo && !(cur?.decoded)) || navPending;
   // key on the caption CONTENT so it only re-animates when the text changes
   // (consecutive shots from the same place/day won't re-trigger the animation)
   const metaKey = `${meta.loc ?? ''}|${meta.date}`;
@@ -692,11 +836,28 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
       <div class="wp-stage" ref={stageRef} />
       {(['a', 'b'] as const).map((slot) => {
         const f = layers[slot];
-        const on = (slot === 'a') === showA; // this layer is the visible one
+        const on = (slot === 'a') === showA; // this layer is the current one
+        // Crossfade = fade the OUTGOING layer OUT, never the incoming one IN.
+        // The current frame snaps to opacity 1 underneath (z1, no transition);
+        // the previous frame sits opaque on top (z2) until `fading` flips (two
+        // painted frames later), then transitions 1->0 to reveal it. A 0->1
+        // fade-in is unreliable on webOS Cr79: a layer parked at opacity 0 may
+        // never be rastered, so the transition has no painted start state and
+        // snaps. The outgoing layer has been on screen for seconds — its 1->0
+        // always animates, and delaying its start keeps the incoming frame's
+        // raster stall from eating the transition window. Inline styles, not
+        // classes, so each layer's opacity/z-index/transition commit atomically.
         return (
           <div
             key={slot}
-            class={'wp-frame' + (on ? ' on' : '')}
+            class="wp-frame"
+            style={
+              on
+                ? { opacity: 1, zIndex: 1, transition: 'none' }
+                : fading
+                  ? { opacity: 0, zIndex: 2, transition: 'opacity 0.9s ease' }
+                  : { opacity: 1, zIndex: 2, transition: 'none' }
+            }
             ref={(node) => mountLayer(node, f, on)}
           />
         );
@@ -717,13 +878,20 @@ export function WallpaperPlayer({ assets, mode, onExit, onNearEnd }: Props) {
       )}
 
       <div class="wp-player-ui">
-        <div class="wp-player-top">
+        <div class={'wp-player-top' + (focusBar ? ' bar-focus' : '')} ref={barRef}>
           {pill !== 'none' && (
             <span class="wp-player-pill">
               <Icon name={pill === 'paused' ? 'pause' : 'play'} size={22} />
               {pill === 'paused' ? 'Paused' : 'Playing'}
             </span>
           )}
+          <button
+            class={'wp-icon-btn' + (shuffle ? ' active' : '')}
+            onClick={() => { toggleShuffle(); poke(); }}
+            title="Shuffle"
+          >
+            <Icon name="shuffle" size={22} />
+          </button>
           {mode === 'photos' && <div class="wp-music">
             {musicOn && (
               <div class="wp-speed">
@@ -800,48 +968,19 @@ function decodeStill(src: string): Promise<HTMLImageElement> {
   return img.decode().then(() => img);
 }
 
-// --- face-aware cover crop ---
-// object-fit:cover crops the axis that overflows the screen; object-position
-// picks WHICH slice survives. Solve for the position that puts the center of
-// the detected faces at the screen's focal point (horizontal center, and 38%
-// from the top — roughly the rule-of-thirds eye line), clamped to 0..100% so
-// the image always still fills the screen. Returns null for "keep the default
-// center crop" (no faces, no overflow, or the math lands on center anyway).
-const FACE_FOCUS_Y = 0.38;
-function faceObjectPosition(w: number, h: number, faces: FaceBox[]): string | null {
-  if (!faces.length || !w || !h) return null;
-  // ignore small background faces (crowds, passers-by): keep only faces at
-  // least 30% of the area of the largest one, then take the union box
-  const area = (f: FaceBox) => Math.max(0, f.x2 - f.x1) * Math.max(0, f.y2 - f.y1);
-  const biggest = Math.max(...faces.map(area));
-  const kept = faces.filter((f) => area(f) >= biggest * 0.3);
-  if (!kept.length) return null;
-  const cx = (Math.min(...kept.map((f) => f.x1)) + Math.max(...kept.map((f) => f.x2))) / 2;
-  const cy = (Math.min(...kept.map((f) => f.y1)) + Math.max(...kept.map((f) => f.y2))) / 2;
-  const sw = window.innerWidth || 1280;
-  const sh = window.innerHeight || 720;
-  const scale = Math.max(sw / w, sh / h);
-  const dw = w * scale; // image size once cover-scaled
-  const dh = h * scale;
-  const clamp = (v: number) => Math.max(0, Math.min(100, v));
-  let px = 50;
-  let py = 50;
-  // object-position P%: image offset = (screen - scaled) * P/100. Solving
-  // "face center lands on the focal point" for P gives the expressions below;
-  // clamping keeps the crop window inside the image (never a gap).
-  if (dw - sw > 1) px = clamp(((cx * dw - sw * 0.5) / (dw - sw)) * 100);
-  if (dh - sh > 1) py = clamp(((cy * dh - sh * FACE_FOCUS_Y) / (dh - sh)) * 100);
-  if (Math.abs(px - 50) < 0.5 && Math.abs(py - 50) < 0.5) return null;
-  return `${px.toFixed(2)}% ${py.toFixed(2)}%`;
-}
-
-// Fetch the asset's detected faces and aim the still's cover crop at them.
-// No-op (default center crop) when there are none. Stills only — see the note
-// in loadInto for why videos keep the center crop on webOS.
-async function aimAtFaces(el: HTMLImageElement, id: string): Promise<void> {
-  const faces = await getAssetFaces(id); // never throws; [] on failure
-  const pos = faceObjectPosition(el.naturalWidth, el.naturalHeight, faces);
-  if (pos) el.style.objectPosition = pos;
+// Weighted shuffle (Efraimidis-Spirakis): each item gets key = rand^(1/weight),
+// sorted descending -> a uniform random permutation biased so heavier items tend
+// earlier / appear more (the same weighted-sampling trick Apple/Google Photos use
+// to favor "good" shots). Weight 1 is the neutral baseline. In-place on `a`.
+const FAV_WEIGHT = 4; // a favorite is ~4x as likely to land early as a plain shot
+function weightedShuffle<T>(a: T[], weight: (item: T) => number): void {
+  const key = new Map<T, number>();
+  for (const item of a) {
+    const w = Math.max(1e-6, weight(item));
+    // rand in (0,1]; ^(1/w) — larger w pushes the key toward 1 (sorts earlier)
+    key.set(item, Math.pow(Math.random() || 1e-9, 1 / w));
+  }
+  a.sort((x, y) => key.get(y)! - key.get(x)!);
 }
 
 function fmtDate(iso: string): string {

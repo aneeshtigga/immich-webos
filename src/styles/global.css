@@ -103,6 +103,39 @@ select {
 .msg.error {
   color: #ff6b6b;
 }
+/* centered empty-state: broken logo + title + fix hint */
+.empty-state {
+  /* longhand offsets, NOT `inset`: webOS 6.x (Cr79) collapses the shorthand */
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  text-align: center;
+}
+.empty-state-logo {
+  width: 168px;
+  height: auto;
+  /* the art fades to a dark shadow over the lower ~72px of the box (invisible on
+     black); pull the title up under the visible art, leaving a small gap */
+  margin-bottom: -60px;
+}
+.empty-state-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+.empty-state-hint {
+  font-size: 19px;
+  color: var(--muted);
+  max-width: 520px;
+}
 
 /* ---------- Splash ---------- */
 .splash {
@@ -1726,11 +1759,11 @@ select {
   background: #000;
   overflow: hidden;
 }
-/* Two persistent crossfade layers. Each sits at opacity 0 and fades to 1 when
-   it becomes the shown layer (.on). Because the layer is long-lived and already
-   painted at 0, toggling .on always triggers a real opacity transition — the
-   same mechanism the selection-page hero carousel uses. (A freshly-mounted node
-   with a keyframe animation snapped in with no fade on webOS Chromium 79.) */
+/* Two persistent crossfade layers. opacity/z-index/transition are set INLINE
+   per layer in the render map: the current frame snaps opaque underneath while
+   the OUTGOING frame fades out on top. (A 0->1 fade-in was unreliable on webOS
+   Cr79 — a layer parked at opacity 0 may never be rastered, so the transition
+   snaps; the outgoing layer is always painted, so its 1->0 always animates.) */
 .wp-frame {
   position: absolute;
   /* longhand offsets, NOT `inset`: webOS 6.x is Chromium 79 and `inset` landed
@@ -1741,12 +1774,7 @@ select {
   left: 0;
   width: 100%;
   height: 100%;
-  opacity: 0;
-  transition: opacity 0.9s ease;
   contain: layout paint; /* isolate paint of the full-screen frame */
-}
-.wp-frame.on {
-  opacity: 1;
 }
 /* Off-screen full-screen staging layer. Positioned out of view but NOT hidden
    (no display:none / visibility:hidden / opacity:0 — those let the engine skip
@@ -1776,6 +1804,7 @@ select {
 .wp-player-spin {
   position: absolute;
   inset: 0;
+  z-index: 3; /* above both crossfade layers (current z1, outgoing z2) */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1785,7 +1814,7 @@ select {
   position: absolute;
   left: 48px;
   bottom: 44px;
-  z-index: 2;
+  z-index: 3; /* above both crossfade layers (current z1, outgoing z2) */
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
   /* opacity-only fade: no transform, so the blurred text-shadow never
      re-rasters mid-animation (that was the TV stutter) */
@@ -1812,6 +1841,7 @@ select {
 .wp-player-ui {
   position: absolute;
   inset: 0;
+  z-index: 3; /* above both crossfade layers (current z1, outgoing z2) */
   opacity: 0;
   transition: opacity 0.2s ease;
   pointer-events: none;
@@ -1893,6 +1923,12 @@ select {
 .wp-speed-btn.active {
   color: #0a0a0a;
   background: var(--immich-dark-primary);
+}
+/* d-pad focus ring on the option bar (Up raises + focuses the bar) */
+.wp-player-top .wp-icon-btn:focus,
+.wp-player-top .wp-speed-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--immich-dark-primary);
 }
 .wp-player-pill {
   display: inline-flex;

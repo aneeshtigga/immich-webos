@@ -293,6 +293,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
               onOpen={openViewer}
               loadNextUnloaded={loadNextRef}
               onAssetsChange={handleAssetsChange}
+              emptyLabel="No photos yet"
+              emptyHint="Upload photos from the Immich mobile or web app and they'll show up here."
             />
           ) : route === 'favorites' ? (
             <PhotoGrid
@@ -301,6 +303,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
               onOpen={openViewer}
               loadNextUnloaded={loadNextRef}
               onAssetsChange={handleAssetsChange}
+              emptyLabel="No favorites yet"
+              emptyHint="Open a photo and tap the heart to favorite it. Favorites appear here."
             />
           ) : route === 'search' ? (
             <Search onOpen={openViewer} />

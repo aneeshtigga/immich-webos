@@ -5,6 +5,8 @@ import { loadThumb, loadBlobUrl, revoke } from '../api/media';
 import { Icon } from '../components/Icon';
 import { IconName } from '../components/icons';
 import { WallpaperPlayer } from './WallpaperPlayer';
+import { aimAtFaces } from './faceCrop';
+import { EmptyState } from '../components/EmptyState';
 
 interface Collection {
   id: string;
@@ -42,6 +44,7 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
   const [player, setPlayer] = useState<Asset[] | null>(null);
   const [playerMode, setPlayerMode] = useState<'photos' | 'videos'>('photos');
   const [preparing, setPreparing] = useState<Collection | null>(null);
+  const [emptySource, setEmptySource] = useState<Collection | null>(null);
   const homeRef = useRef<HTMLDivElement>(null);
   // bumped to cancel an in-flight prepare (Back pressed while preparing)
   const prepToken = useRef(0);
@@ -61,12 +64,16 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
         setPreparing(null);
         return true;
       }
+      if (emptySource) {
+        setEmptySource(null);
+        return true;
+      }
       return false;
     };
     return () => {
       backRef.current = null;
     };
-  }, [backRef, player, preparing]);
+  }, [backRef, player, preparing, emptySource]);
 
   useEffect(() => {
     onFullscreen(!!player);
@@ -111,8 +118,28 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Shuffle toggled in the player: reorder the NOT-YET-CONSUMED buckets so the
+  // pages that stream in next are sampled from across the whole timeline (a
+  // library-wide bound), not just the chronological tail. Off restores
+  // chronological order. Already-loaded assets are permuted by the player.
+  const onShuffleChange = useCallback((on: boolean) => {
+    const f = feed.current;
+    if (!f) return;
+    const rest = f.buckets.slice(f.idx);
+    if (on) {
+      for (let k = rest.length - 1; k > 0; k--) {
+        const j = Math.floor(Math.random() * (k + 1));
+        [rest[k], rest[j]] = [rest[j], rest[k]];
+      }
+    } else {
+      rest.sort((a, b) => (a.timeBucket < b.timeBucket ? 1 : -1)); // newest first
+    }
+    f.buckets = [...f.buckets.slice(0, f.idx), ...rest];
+  }, []);
+
   const openCollection = async (c: Collection) => {
     const token = ++prepToken.current;
+    setEmptySource(null);
     setPlayerMode(c.id === 'videos' ? 'videos' : 'photos');
     setPreparing(c);
     const buckets = await getTimelineBuckets().catch(() => [] as TimeBucket[]);
@@ -122,6 +149,7 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     if (prepToken.current !== token) return;
     setPreparing(null);
     if (first.length) setPlayer(first);
+    else setEmptySource(c); // nothing matched this source
   };
 
   return (
@@ -148,8 +176,23 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
         </div>
       )}
 
+      {emptySource && (
+        <div class="wp-prep">
+          <EmptyState
+            title={`No ${emptySource.label.toLowerCase()} to show`}
+            hint="Add photos or videos to your Immich library to use them as wallpaper."
+          />
+        </div>
+      )}
+
       {player && (
-        <WallpaperPlayer assets={player} mode={playerMode} onExit={() => setPlayer(null)} onNearEnd={loadMore} />
+        <WallpaperPlayer
+          assets={player}
+          mode={playerMode}
+          onExit={() => setPlayer(null)}
+          onNearEnd={loadMore}
+          onShuffleChange={onShuffleChange}
+        />
       )}
     </div>
   );
@@ -169,10 +212,14 @@ function pickRandom<T>(items: T[], n: number): T[] {
 // switches (and Hero unmount/remount). Returning to a tile shows exactly the
 // previews it already loaded — never a blank, never a fresh random shuffle.
 const HERO_MAX = 6;
+interface HeroPreview {
+  url: string; // preview object URL
+  id: string; // asset id (for face-aware cropping)
+}
 interface HeroState {
   pool: Asset[] | null; // candidate assets in a fixed random order
   cursor: number; // next pool index to attempt loading
-  loaded: string[]; // preview object URLs loaded so far (kept for app lifetime)
+  loaded: HeroPreview[]; // previews loaded so far (kept for app lifetime)
   loading: boolean; // a fill() is in flight for this collection
 }
 const heroStore = new Map<string, HeroState>();
@@ -203,7 +250,7 @@ function collectionPool(c: Collection): Promise<Asset[]> {
 // Clear all wallpaper caches (hero previews + collection pools) — call on
 // logout/account switch so a new account doesn't see the old one's assets.
 export function resetWallpaperCaches(): void {
-  for (const s of heroStore.values()) s.loaded.forEach(revoke);
+  for (const s of heroStore.values()) s.loaded.forEach((p) => revoke(p.url));
   heroStore.clear();
   poolCache.clear();
 }
@@ -226,7 +273,7 @@ async function fillHero(c: Collection, max: number): Promise<void> {
     while (st.loaded.length < max && st.cursor < st.pool.length) {
       const a = st.pool[st.cursor++];
       try {
-        st.loaded.push(await loadBlobUrl(thumbnailUrl(a.id, 'preview')));
+        st.loaded.push({ url: await loadBlobUrl(thumbnailUrl(a.id, 'preview')), id: a.id });
         heroEmit();
       } catch {
         // unloadable — skip and try the next in the pool
@@ -256,7 +303,7 @@ function Hero({ collection }: { collection: Collection }) {
   const st = heroState(collection.id);
   const srcs = st.loaded;
 
-  const [layers, setLayers] = useState<{ a: string | null; b: string | null }>({ a: null, b: null });
+  const [layers, setLayers] = useState<{ a: HeroPreview | null; b: HeroPreview | null }>({ a: null, b: null });
   const [showA, setShowA] = useState(true);
   const showARef = useRef(true);
 
@@ -292,12 +339,29 @@ function Hero({ collection }: { collection: Collection }) {
     setLayers((prev) => (toA ? { a: curSrc, b: prev.b } : { a: prev.a, b: curSrc }));
     showARef.current = toA;
     setShowA(toA);
-  }, [curSrc]);
+  }, [curSrc?.url]);
+
+  // aim each layer's cover crop at faces once it has decoded (natural size known)
+  const aim = (e: Event, p: HeroPreview) => void aimAtFaces(e.currentTarget as HTMLImageElement, p.id);
 
   return (
     <div class="wp-hero">
-      {layers.a && <img class={'wp-hero-img' + (showA ? ' on' : '')} src={layers.a} decoding="async" />}
-      {layers.b && <img class={'wp-hero-img' + (!showA ? ' on' : '')} src={layers.b} decoding="async" />}
+      {layers.a && (
+        <img
+          class={'wp-hero-img' + (showA ? ' on' : '')}
+          src={layers.a.url}
+          decoding="async"
+          onLoad={(e) => aim(e, layers.a!)}
+        />
+      )}
+      {layers.b && (
+        <img
+          class={'wp-hero-img' + (!showA ? ' on' : '')}
+          src={layers.b.url}
+          decoding="async"
+          onLoad={(e) => aim(e, layers.b!)}
+        />
+      )}
       <div class="wp-hero-scrim" />
       <div class="wp-hero-meta">
         <div class="wp-hero-kicker">
