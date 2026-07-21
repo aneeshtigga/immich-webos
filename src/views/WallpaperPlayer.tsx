@@ -5,6 +5,7 @@ import { loadBlobUrl, revoke } from '../api/media';
 import { thumbnailUrl, videoStreamUrl, originalUrl, getAssetLocation } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { fetchStations, Station } from '../api/radio';
+import { keepAwake } from '../api/screensaver';
 import { Icon } from '../components/Icon';
 import { aimAtFaces } from './faceCrop';
 
@@ -142,6 +143,10 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
   musicOnRef.current = musicOn;
   const [, setTick] = useState(0);
   const bump = useCallback(() => setTick((t) => t + 1), []);
+
+  // hold off the TV screen saver for as long as the player is open (no-op off
+  // webOS); cleanup releases it so the saver resumes on the timeline
+  useEffect(() => keepAwake(), []);
 
   const keyRef = useRef(0);
   // off-screen full-screen container used to lay out + raster a decoded still at
