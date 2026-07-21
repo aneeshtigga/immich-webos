@@ -740,6 +740,38 @@ select {
   overflow: hidden;
 }
 
+/* Floating per-view sort toggle. Sits top-right over the grid; circular like the
+   album back button. Above the grid content, below the rail (6) and viewer (50)
+   so it never covers the sidebar or fullscreen. */
+.sort-btn {
+  position: absolute;
+  top: 20px; /* line up with the album header's Back button (padding-top 20) */
+  right: 16px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--fg);
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+/* Faded out while scrolling down; a scroll up brings it back (see Home). */
+.sort-btn.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+/* The generic .focusable:focus sets position:relative (to host its ring); that
+   would knock this absolutely-positioned button back into flow on focus. Keep it
+   absolute — its own box already anchors the focus ring. */
+.sort-btn:focus {
+  position: absolute;
+}
+
 /* View transition: each view is wrapped in a keyed .view-enter, so switching
    tabs replaces the node and replays this fade-up instead of swapping content
    abruptly. GPU-composited (opacity + transform) so it stays smooth on webOS.

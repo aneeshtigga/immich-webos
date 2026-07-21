@@ -10,6 +10,7 @@ import {
   Album,
 } from '../api/client';
 import { clearSession, getUser } from '../auth/store';
+import { getSort, setSort, SortSection, SortDir } from '../settings';
 import { Asset } from '../api/assets';
 import { PhotoGrid } from '../components/PhotoGrid';
 import { Icon } from '../components/Icon';
@@ -56,6 +57,61 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   viewerRef.current = viewer;
   const user = getUser();
 
+  // Per-section sort direction, seeded from the persisted preference. Held in
+  // state so flipping it re-renders: the view wrapper's key includes the active
+  // section's direction (below), so a flip remounts the grid and it refetches
+  // in the new order. Search has no sortable order.
+  const [sort, setSortState] = useState<Record<SortSection, SortDir>>({
+    timeline: getSort('timeline'),
+    favorites: getSort('favorites'),
+    albums: getSort('albums'),
+    album: getSort('album'),
+  });
+  // The section the visible view maps to (null while on Search — no sort there).
+  const section: SortSection | null = album
+    ? 'album'
+    : route === 'timeline' || route === 'favorites' || route === 'albums'
+      ? route
+      : null;
+  // Hide the sort button while scrolling down, reveal it on scroll up — keeps it
+  // out of the way mid-browse but a flick up brings it back. Scroll events don't
+  // bubble, so listen in the capture phase on the shell and read the scrolling
+  // element's own scrollTop (works for whichever view's scroller fires).
+  const [sortHidden, setSortHidden] = useState(false);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    let lastY = 0;
+    let lastTarget: EventTarget | null = null;
+    const onScroll = (e: Event) => {
+      const t = e.target as HTMLElement;
+      if (!t || typeof t.scrollTop !== 'number') return;
+      const y = t.scrollTop;
+      if (t !== lastTarget) {
+        lastTarget = t;
+        lastY = y;
+        return;
+      }
+      const dy = y - lastY;
+      if (Math.abs(dy) < 8) return; // ignore jitter
+      setSortHidden(dy > 0 && y > 40);
+      lastY = y;
+    };
+    root.addEventListener('scroll', onScroll, true);
+    return () => root.removeEventListener('scroll', onScroll, true);
+  }, []);
+
+  const toggleSort = () => {
+    if (!section) return;
+    const next: SortDir = sort[section] === 'desc' ? 'asc' : 'desc';
+    setSort(section, next);
+    setSortState((s) => ({ ...s, [section]: next }));
+    // The key flip remounts the grid; focus its first thumbnail once it mounts
+    // (focusFirstContent retries while the first bucket loads) rather than
+    // stranding focus on the now-detached sort button.
+    setTimeout(() => focusFirstContent(), 0);
+  };
+
   // open the sidebar and focus its currently-active tab
   const openSidebarFocusActive = () => {
     // remember where focus was in the content so we can return to it on collapse
@@ -94,6 +150,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   // closing restores focus to the viewed thumbnail explicitly (closeViewer).
   useEffect(() => {
     setRoot(rootRef.current);
+    setSortHidden(false); // switching view resets to top → show the button
     // Returning to the albums list restores its own scroll + focus (see Albums);
     // don't yank focus to the first card in that case.
     if (!album && route === 'albums' && albumsRestore.current) return;
@@ -257,13 +314,36 @@ export function Home({ onLogout }: { onLogout: () => void }) {
       <main class={'content ' + (sidebarOpen ? 'shifted ' : '') + (route === 'wallpaper' ? 'wallpaper' : '')}>
         {/* keyed wrapper: changing view replaces it, replaying the fade-in so
             switching tabs eases in instead of swapping abruptly */}
-        <div class="view-enter" key={album ? 'album:' + album.id : route}>
+        {/* Floating sort toggle, top-right of the content. data-noautofocus keeps
+            autofocus on the first thumbnail; d-pad still reaches it. Hidden on
+            Search (no order to flip). */}
+        {section && (
+          <button
+            data-focusable
+            data-noautofocus
+            data-header-nav
+            class={'sort-btn focusable' + (sortHidden ? ' hidden' : '')}
+            onClick={toggleSort}
+            aria-label={sort[section] === 'asc' ? 'Oldest first' : 'Newest first'}
+            title={sort[section] === 'asc' ? 'Oldest first' : 'Newest first'}
+          >
+            <Icon name={sort[section] === 'asc' ? 'sortAsc' : 'sortDesc'} size={28} />
+          </button>
+        )}
+        <div
+          class="view-enter"
+          key={
+            (album ? 'album:' + album.id : route) +
+            (section ? ':' + sort[section] : '')
+          }
+        >
           {album ? (
             <div class="album-view">
               <header class="album-header">
                 <button
                   data-focusable
                   data-noautofocus
+                  data-header-nav
                   class="album-back focusable"
                   onClick={() => setAlbum(null)}
                   aria-label="Back to albums"
@@ -279,8 +359,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
                 </div>
               </header>
               <PhotoGrid
-                loadBuckets={() => getAlbumBuckets(album.id)}
-                loadBucket={(tb) => getAlbumBucket(album.id, tb)}
+                loadBuckets={() => getAlbumBuckets(album.id, sort.album)}
+                loadBucket={(tb) => getAlbumBucket(album.id, tb, sort.album)}
                 onOpen={openViewer}
                 loadNextUnloaded={loadNextRef}
                 onAssetsChange={handleAssetsChange}
@@ -288,8 +368,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             </div>
           ) : route === 'timeline' ? (
             <PhotoGrid
-              loadBuckets={getTimelineBuckets}
-              loadBucket={getBucket}
+              loadBuckets={() => getTimelineBuckets(sort.timeline)}
+              loadBucket={(tb) => getBucket(tb, sort.timeline)}
               onOpen={openViewer}
               loadNextUnloaded={loadNextRef}
               onAssetsChange={handleAssetsChange}
@@ -298,8 +378,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             />
           ) : route === 'favorites' ? (
             <PhotoGrid
-              loadBuckets={getFavoriteBuckets}
-              loadBucket={getFavoriteBucket}
+              loadBuckets={() => getFavoriteBuckets(sort.favorites)}
+              loadBucket={(tb) => getFavoriteBucket(tb, sort.favorites)}
               onOpen={openViewer}
               loadNextUnloaded={loadNextRef}
               onAssetsChange={handleAssetsChange}
@@ -312,6 +392,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             <Wallpaper backRef={wallpaperBack} onFullscreen={setWpFullscreen} />
           ) : (
             <Albums
+              order={sort.albums}
               onOpenAlbum={(a) => {
                 const grid =
                   rootRef.current?.querySelector<HTMLElement>('.album-grid');

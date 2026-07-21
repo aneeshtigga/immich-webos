@@ -4,6 +4,7 @@ import { loadBlobUrl, loadThumb, revoke } from '../api/media';
 import { thumbnailUrl, videoStreamUrl, originalStreamUrl, getAssetLocation } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { Icon } from '../components/Icon';
+import { getLivePlay, setLivePlay, getVideoQuality, setVideoQuality } from '../settings';
 
 interface Props {
   assets: Asset[];
@@ -17,7 +18,7 @@ interface Props {
 
 type Quality = 'transcoded' | 'original';
 const SEEK_STEP = 10; // seconds
-const HIDE_MS = 3000;
+const HIDE_MS = 5000;
 
 // Unified fullscreen viewer for photos and videos with an auto-hiding overlay.
 //
@@ -40,7 +41,8 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [location, setLocation] = useState<string | null>(null);
   const [paused, setPaused] = useState(true);
   const [progress, setProgress] = useState({ cur: 0, dur: 0 });
-  const [quality, setQuality] = useState<Quality>('transcoded');
+  // remembered across assets and restarts (see settings.getVideoQuality)
+  const [quality, setQuality] = useState<Quality>(getVideoQuality);
   const [overlay, setOverlay] = useState(true);
   const [videoErr, setVideoErr] = useState(false);
   const [buffering, setBuffering] = useState(false);
@@ -51,6 +53,11 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [motionOn, setMotionOn] = useState(false);
   const [motionVisible, setMotionVisible] = useState(false);
   const motionFadeTimer = useRef<number | undefined>(undefined);
+  // Persisted "live play" preference: whether Live Photos autoplay their motion.
+  // Off by default; toggled with OK/Enter and remembered across app restarts.
+  const [livePlay, setLivePlayState] = useState(getLivePlay);
+  const livePlayRef = useRef(livePlay);
+  livePlayRef.current = livePlay;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const motionRef = useRef<HTMLVideoElement>(null);
@@ -66,12 +73,14 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   // A still that carries a paired motion clip is a Live Photo.
   const livePhotoId = asset && !isVideo ? asset.livePhotoVideoId ?? null : null;
 
-  // Autoplay the motion clip once each time a Live Photo is opened; clear it
-  // for plain photos and videos.
+  // On opening a Live Photo, autoplay its motion only if live play is enabled;
+  // clear it for plain photos, videos, or when the preference is off. Reads the
+  // preference via a ref so toggling it doesn't re-run this (the toggle handler
+  // applies the change to the current photo itself).
   useEffect(() => {
     window.clearTimeout(motionFadeTimer.current);
     setMotionVisible(false);
-    setMotionOn(!!livePhotoId);
+    setMotionOn(!!livePhotoId && livePlayRef.current);
   }, [asset?.id, livePhotoId]);
 
   // Fade the motion clip out (revealing the still beneath) rather than cutting.
@@ -86,10 +95,18 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     setMotionVisible(false); // stays transparent until the first frame decodes
     setMotionOn(true);
   }, []);
-  const toggleMotion = useCallback(() => {
-    if (motionOn && motionVisible) endMotion();
-    else replayMotion();
-  }, [motionOn, motionVisible, endMotion, replayMotion]);
+  // OK/Enter toggles the persisted live-play preference AND applies it to the
+  // photo on screen: turning it on plays the current Live Photo's motion,
+  // turning it off stops it. The choice sticks for future photos and restarts.
+  const toggleLivePlay = useCallback(() => {
+    setLivePlayState((prev) => {
+      const next = !prev;
+      setLivePlay(next);
+      if (next) replayMotion();
+      else endMotion();
+      return next;
+    });
+  }, [replayMotion, endMotion]);
   useEffect(() => () => window.clearTimeout(motionFadeTimer.current), []);
 
   // fire onNearEnd when within 5 of the end so the grid prefetches the next bucket
@@ -106,12 +123,11 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     (forceShow = true) => {
       if (forceShow) setOverlay(true);
       window.clearTimeout(hideTimer.current);
-      // only auto-hide while a video is actively playing
-      if (isVideo && !paused) {
-        hideTimer.current = window.setTimeout(() => setOverlay(false), HIDE_MS);
-      }
+      // auto-hide after inactivity for both photos and videos; any interaction
+      // (pointer move, key, seek) re-shows it and restarts the countdown.
+      hideTimer.current = window.setTimeout(() => setOverlay(false), HIDE_MS);
     },
-    [isVideo, paused],
+    [],
   );
 
   useEffect(() => {
@@ -177,9 +193,9 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     [],
   );
 
-  // reset per-asset video state
+  // reset per-asset video state (quality is intentionally NOT reset — it carries
+  // over to every video and persists across restarts)
   useEffect(() => {
-    setQuality('transcoded');
     setVideoErr(false);
     setProgress({ cur: 0, dur: 0 });
     resumeAt.current = 0;
@@ -257,7 +273,11 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const cycleQuality = useCallback(() => {
     const v = videoRef.current;
     resumeAt.current = v?.currentTime || 0;
-    setQuality((q) => (q === 'transcoded' ? 'original' : 'transcoded'));
+    setQuality((q) => {
+      const next: Quality = q === 'transcoded' ? 'original' : 'transcoded';
+      setVideoQuality(next); // remember for later videos + app restarts
+      return next;
+    });
     setVideoErr(false);
   }, []);
 
@@ -304,7 +324,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
       // photo
       if (livePhotoId && (code === Key.Enter || code === Key.PlayPause)) {
         e.preventDefault();
-        toggleMotion(); // OK/Enter plays or stops the Live Photo motion
+        toggleLivePlay(); // OK/Enter turns live play on/off (persisted) + applies now
       } else if (dir === 'left') {
         e.preventDefault();
         go(-1);
@@ -315,7 +335,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isVideo, paused, go, seek, togglePlay, poke, onClose, livePhotoId, toggleMotion]);
+  }, [isVideo, paused, go, seek, togglePlay, poke, onClose, livePhotoId, toggleLivePlay]);
 
   if (!asset) return null;
 
@@ -426,9 +446,9 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
             {location && <span class="fs-location">{location}</span>}
             {livePhotoId && (
               <button
-                class={'fs-btn round' + (motionOn && motionVisible ? ' active' : '')}
-                onClick={replayMotion}
-                title="Play Live Photo"
+                class={'fs-btn round' + (livePlay ? ' active' : '')}
+                onClick={toggleLivePlay}
+                title={livePlay ? 'Live play on' : 'Live play off'}
               >
                 <Icon name="live" size={28} />
               </button>
