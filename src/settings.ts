@@ -4,6 +4,7 @@
 const LIVE_PLAY_KEY = 'immich.livePlay';
 const VIDEO_QUALITY_KEY = 'immich.videoQuality';
 const SORT_KEY = 'immich.sort.';
+const OVERLAY_HIDDEN_KEY = 'immich.overlayHidden';
 
 export type VideoQuality = 'transcoded' | 'original';
 
@@ -28,6 +29,20 @@ export function getLivePlay(): boolean {
 export function setLivePlay(on: boolean): void {
   if (on) localStorage.setItem(LIVE_PLAY_KEY, '1');
   else localStorage.removeItem(LIVE_PLAY_KEY);
+}
+
+// Whether the fullscreen viewer keeps its overlay (back, arrows, location,
+// quality) permanently hidden while browsing. Off by default (overlay auto-hides
+// after inactivity); the user turns it on from the grid header for a clean,
+// distraction-free view and it sticks across restarts. Navigation (arrows/back)
+// still works via the remote regardless.
+export function getOverlayHidden(): boolean {
+  return localStorage.getItem(OVERLAY_HIDDEN_KEY) === '1';
+}
+
+export function setOverlayHidden(on: boolean): void {
+  if (on) localStorage.setItem(OVERLAY_HIDDEN_KEY, '1');
+  else localStorage.removeItem(OVERLAY_HIDDEN_KEY);
 }
 
 // Per-section sort direction. 'desc' (newest first) is the default everywhere;

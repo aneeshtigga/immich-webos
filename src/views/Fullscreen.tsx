@@ -4,7 +4,13 @@ import { loadBlobUrl, loadThumb, revoke } from '../api/media';
 import { thumbnailUrl, videoStreamUrl, originalStreamUrl, getAssetLocation } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { Icon } from '../components/Icon';
-import { getLivePlay, setLivePlay, getVideoQuality, setVideoQuality } from '../settings';
+import {
+  getLivePlay,
+  setLivePlay,
+  getVideoQuality,
+  setVideoQuality,
+  getOverlayHidden,
+} from '../settings';
 
 interface Props {
   assets: Asset[];
@@ -43,7 +49,11 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [progress, setProgress] = useState({ cur: 0, dur: 0 });
   // remembered across assets and restarts (see settings.getVideoQuality)
   const [quality, setQuality] = useState<Quality>(getVideoQuality);
-  const [overlay, setOverlay] = useState(true);
+  // When the user has toggled "hide overlay" in the grid header, the viewer
+  // opens with its chrome hidden and never auto-shows it (poke below no-ops the
+  // show). Read once at open; nav/back still work via the remote regardless.
+  const overlayHidden = useRef(getOverlayHidden()).current;
+  const [overlay, setOverlay] = useState(!overlayHidden);
   const [videoErr, setVideoErr] = useState(false);
   const [buffering, setBuffering] = useState(false);
   // Live Photo: motionOn keeps the clip mounted; motionVisible drives its
@@ -121,13 +131,18 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   // ---- overlay auto-hide ----
   const poke = useCallback(
     (forceShow = true) => {
+      // Overlay-hidden mode: keep it hidden, never show or arm the timer.
+      if (overlayHidden) {
+        setOverlay(false);
+        return;
+      }
       if (forceShow) setOverlay(true);
       window.clearTimeout(hideTimer.current);
       // auto-hide after inactivity for both photos and videos; any interaction
       // (pointer move, key, seek) re-shows it and restarts the countdown.
       hideTimer.current = window.setTimeout(() => setOverlay(false), HIDE_MS);
     },
-    [],
+    [overlayHidden],
   );
 
   useEffect(() => {
@@ -496,10 +511,6 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
             <span class="fs-time">{fmt(progress.dur)}</span>
           </div>
         )}
-
-        <div class="fs-counter">
-          {i + 1} / {assets.length}
-        </div>
       </div>
     </div>
   );

@@ -745,10 +745,10 @@ select {
 /* Floating per-view sort toggle. Sits top-right over the grid; circular like the
    album back button. Above the grid content, below the rail (6) and viewer (50)
    so it never covers the sidebar or fullscreen. */
-.sort-btn {
+.sort-btn,
+.overlay-btn {
   position: absolute;
   top: 20px; /* line up with the album header's Back button (padding-top 20) */
-  right: 16px;
   z-index: 4;
   display: inline-flex;
   align-items: center;
@@ -762,15 +762,24 @@ select {
   opacity: 1;
   transition: opacity 0.2s ease;
 }
+.sort-btn {
+  right: 16px;
+}
+/* Sits left of the sort button (52px wide + 12px gap). */
+.overlay-btn {
+  right: 80px;
+}
 /* Faded out while scrolling down; a scroll up brings it back (see Home). */
-.sort-btn.hidden {
+.sort-btn.hidden,
+.overlay-btn.hidden {
   opacity: 0;
   pointer-events: none;
 }
 /* The generic .focusable:focus sets position:relative (to host its ring); that
-   would knock this absolutely-positioned button back into flow on focus. Keep it
-   absolute — its own box already anchors the focus ring. */
-.sort-btn:focus {
+   would knock these absolutely-positioned buttons back into flow on focus. Keep
+   them absolute — their own box already anchors the focus ring. */
+.sort-btn:focus,
+.overlay-btn:focus {
   position: absolute;
 }
 
@@ -1495,15 +1504,33 @@ select {
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
 }
 
-.fs-counter {
-  position: absolute;
-  bottom: 18px;
-  right: 32px;
-  font-size: 18px;
-  color: #ddd;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 5px 12px;
-  border-radius: 8px;
+/* Transient bottom toast (overlay toggle confirmation). Above the grid/rail,
+   below the viewer (50). Centred via translateX, not `inset`, for webOS Cr79. */
+.toast {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: 80vw;
+  padding: 12px 24px;
+  border-radius: 24px;
+  background: rgba(0, 0, 0, 0.82);
+  color: var(--fg);
+  font-size: 22px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: toast-in 0.2s ease;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* ---------- Confirm dialog ---------- */

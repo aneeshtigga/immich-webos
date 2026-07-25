@@ -10,7 +10,14 @@ import {
   Album,
 } from '../api/client';
 import { clearSession, getUser } from '../auth/store';
-import { getSort, setSort, SortSection, SortDir } from '../settings';
+import {
+  getSort,
+  setSort,
+  SortSection,
+  SortDir,
+  getOverlayHidden,
+  setOverlayHidden,
+} from '../settings';
 import { Asset } from '../api/assets';
 import { PhotoGrid } from '../components/PhotoGrid';
 import { Icon } from '../components/Icon';
@@ -110,6 +117,26 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     // (focusFirstContent retries while the first bucket loads) rather than
     // stranding focus on the now-detached sort button.
     setTimeout(() => focusFirstContent(), 0);
+  };
+
+  // Whether the fullscreen viewer keeps its overlay permanently hidden. Held in
+  // state so the header button's icon reflects it; Fullscreen reads the persisted
+  // value at open time, so no grid remount is needed on flip and focus stays put.
+  const [overlayHidden, setOverlayHiddenState] = useState(getOverlayHidden);
+  // Transient confirmation shown at the bottom when the overlay toggle flips, so
+  // the effect (which only shows later inside the viewer) is obvious right away.
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const flashToast = (msg: string) => {
+    setToast(msg);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2400);
+  };
+  const toggleOverlay = () => {
+    const next = !overlayHidden;
+    setOverlayHidden(next);
+    setOverlayHiddenState(next);
+    flashToast(next ? 'Player overlay will be hidden' : 'Player overlay will be shown');
   };
 
   // open the sidebar and focus its currently-active tab
@@ -299,6 +326,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
           onNearEnd={handleNearEnd}
         />
       )}
+      {toast && <div class="toast">{toast}</div>}
       <Sidebar
         open={sidebarOpen}
         active={route}
@@ -341,6 +369,21 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             title={sort[section] === 'asc' ? 'Oldest first' : 'Newest first'}
           >
             <Icon name={sort[section] === 'asc' ? 'sortAsc' : 'sortDesc'} size={28} />
+          </button>
+        )}
+        {/* Overlay show/hide toggle, sits left of the sort button. Controls
+            whether the fullscreen viewer keeps its chrome hidden while browsing. */}
+        {section && (
+          <button
+            data-focusable
+            data-noautofocus
+            data-header-nav
+            class={'overlay-btn focusable' + (sortHidden ? ' hidden' : '')}
+            onClick={toggleOverlay}
+            aria-label={overlayHidden ? 'Show player overlay' : 'Hide player overlay'}
+            title={overlayHidden ? 'Show player overlay' : 'Hide player overlay'}
+          >
+            <Icon name={overlayHidden ? 'eyeOff' : 'eye'} size={28} />
           </button>
         )}
         <div
