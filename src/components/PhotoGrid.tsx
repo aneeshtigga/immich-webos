@@ -34,7 +34,11 @@ interface Props {
 // re-renders ONLY that section — not all N previously loaded sections. Without
 // this the grid did O(N) justify()+vnode work on every bucket load, which is
 // why the UI degraded the longer you scrolled.
-export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, onAssetsChange, emptyLabel, emptyHint }: Props) {
+// memo: a parent (Home) re-render — e.g. toggling the sidebar — must not
+// reconcile this whole grid. All props are stable (Home useCallback's the
+// loaders; literals for the rest), so a re-render with the same view is a
+// no-op here instead of an 800ms+ diff of every thumbnail vnode.
+export const PhotoGrid = memo(function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, onAssetsChange, emptyLabel, emptyHint }: Props) {
   const [buckets, setBuckets] = useState<TimeBucket[]>([]);
   const [fetched, setFetched] = useState(false); // bucket list resolved (may be empty)
   const [loaded, setLoaded] = useState<Record<string, Asset[]>>({});
@@ -168,7 +172,7 @@ export function PhotoGrid({ loadBuckets, loadBucket, onOpen, loadNextUnloaded, o
       ))}
     </div>
   );
-}
+});
 
 const BucketSection = memo(function BucketSection({
   bucket,

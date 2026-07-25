@@ -171,6 +171,19 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     loadNextRef.current?.();
   }, []);
 
+  // Stable per-view loaders. Inline lambdas here changed identity on every Home
+  // re-render (e.g. a sidebar toggle), which both re-fired PhotoGrid's
+  // `[loadBuckets]` effect (a full bucket re-fetch) and defeated the memo below,
+  // reconciling the whole grid each toggle — the sidebar-animation lag. Keyed
+  // only on the sort/album inputs, they stay stable across unrelated re-renders.
+  const albumId = album?.id;
+  const loadTimelineBuckets = useCallback(() => getTimelineBuckets(sort.timeline), [sort.timeline]);
+  const loadTimelineBucket = useCallback((tb: string) => getBucket(tb, sort.timeline), [sort.timeline]);
+  const loadFavoriteBuckets = useCallback(() => getFavoriteBuckets(sort.favorites), [sort.favorites]);
+  const loadFavoriteBucket = useCallback((tb: string) => getFavoriteBucket(tb, sort.favorites), [sort.favorites]);
+  const loadAlbumBuckets = useCallback(() => getAlbumBuckets(albumId!, sort.album), [albumId, sort.album]);
+  const loadAlbumBucket = useCallback((tb: string) => getAlbumBucket(albumId!, tb, sort.album), [albumId, sort.album]);
+
   // Close the viewer and return focus to the thumbnail of the photo last shown
   // (the user may have paged left/right inside the viewer). The grid was never
   // unmounted, so its scroll position and loaded buckets are intact and the
@@ -311,7 +324,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         <div class="sidebar-catch" onClick={collapseSidebar} />
       )}
 
-      <main class={'content ' + (sidebarOpen ? 'shifted ' : '') + (route === 'wallpaper' ? 'wallpaper' : '')}>
+      <main class={'content ' + (route === 'wallpaper' ? 'wallpaper' : '')}>
         {/* keyed wrapper: changing view replaces it, replaying the fade-in so
             switching tabs eases in instead of swapping abruptly */}
         {/* Floating sort toggle, top-right of the content. data-noautofocus keeps
@@ -359,8 +372,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
                 </div>
               </header>
               <PhotoGrid
-                loadBuckets={() => getAlbumBuckets(album.id, sort.album)}
-                loadBucket={(tb) => getAlbumBucket(album.id, tb, sort.album)}
+                loadBuckets={loadAlbumBuckets}
+                loadBucket={loadAlbumBucket}
                 onOpen={openViewer}
                 loadNextUnloaded={loadNextRef}
                 onAssetsChange={handleAssetsChange}
@@ -368,8 +381,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             </div>
           ) : route === 'timeline' ? (
             <PhotoGrid
-              loadBuckets={() => getTimelineBuckets(sort.timeline)}
-              loadBucket={(tb) => getBucket(tb, sort.timeline)}
+              loadBuckets={loadTimelineBuckets}
+              loadBucket={loadTimelineBucket}
               onOpen={openViewer}
               loadNextUnloaded={loadNextRef}
               onAssetsChange={handleAssetsChange}
@@ -378,8 +391,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             />
           ) : route === 'favorites' ? (
             <PhotoGrid
-              loadBuckets={() => getFavoriteBuckets(sort.favorites)}
-              loadBucket={(tb) => getFavoriteBucket(tb, sort.favorites)}
+              loadBuckets={loadFavoriteBuckets}
+              loadBucket={loadFavoriteBucket}
               onOpen={openViewer}
               loadNextUnloaded={loadNextRef}
               onAssetsChange={handleAssetsChange}

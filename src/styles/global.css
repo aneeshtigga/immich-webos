@@ -667,7 +667,9 @@ select {
   width: 52px; /* centered on the icon: 12 + 26 = 38 ≈ strip center */
   border-radius: 16px;
   background: transparent;
-  transition: background 0.12s ease, box-shadow 0.08s ease, width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  /* No width transition: 52px -> auto isn't interpolatable, so it never
+     animated; the squircle just snaps to bar width as the card opens. */
+  transition: background 0.12s ease, box-shadow 0.08s ease;
 }
 .rail.open .rail-item::before {
   width: auto;
