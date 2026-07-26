@@ -153,6 +153,12 @@ export async function validateToken(): Promise<boolean> {
 // within each bucket, so a whole section reads oldest-to-newest end to end.
 export type Order = 'asc' | 'desc';
 
+// Some Immich server versions return timeBucket in short form ("2026-07-01")
+// from /timeline/buckets, but /timeline/bucket expects the full ISO form
+// ("2026-07-01T00:00:00.000Z"). Normalise before sending the query back.
+const padBucket = (tb: string): string =>
+  tb.length === 10 ? tb + 'T00:00:00.000Z' : tb;
+
 // Default timeline query: own assets, exclude trashed. Order defaults to newest
 // first; callers pass the user's saved per-section direction.
 export async function getTimelineBuckets(order: Order = 'desc'): Promise<TimeBucket[]> {
@@ -165,7 +171,7 @@ export async function getBucket(
   order: Order = 'desc',
 ): Promise<BucketColumns> {
   const q = new URLSearchParams({
-    timeBucket,
+    timeBucket: padBucket(timeBucket),
     isTrashed: 'false',
     order,
   });
@@ -182,7 +188,7 @@ export async function getFavoriteBucket(
   order: Order = 'desc',
 ): Promise<BucketColumns> {
   const q = new URLSearchParams({
-    timeBucket,
+    timeBucket: padBucket(timeBucket),
     isTrashed: 'false',
     isFavorite: 'true',
     order,
@@ -220,7 +226,7 @@ export async function getAlbumBucket(
   timeBucket: string,
   order: Order = 'desc',
 ): Promise<BucketColumns> {
-  const q = new URLSearchParams({ albumId, timeBucket, order });
+  const q = new URLSearchParams({ albumId, timeBucket: padBucket(timeBucket), order });
   return jsonReq<BucketColumns>('/timeline/bucket?' + q.toString());
 }
 
