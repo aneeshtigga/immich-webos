@@ -1,6 +1,16 @@
 import { useEffect, useState, useRef, useCallback } from 'preact/hooks';
 import { Asset, flattenBucket } from '../api/assets';
-import { getTimelineBuckets, getBucket, thumbnailUrl, searchByType, TimeBucket } from '../api/client';
+import {
+  getTimelineBuckets,
+  getBucket,
+  getAlbums,
+  getAlbumBuckets,
+  getAlbumBucket,
+  thumbnailUrl,
+  searchByType,
+  TimeBucket,
+  Album,
+} from '../api/client';
 import { loadThumb, loadBlobUrl, revoke } from '../api/media';
 import { Icon } from '../components/Icon';
 import { IconName } from '../components/icons';
@@ -13,9 +23,17 @@ interface Collection {
   label: string;
   hint: string;
   icon: IconName;
-  // `type` drives the fast hero/cover sample (metadata search); `filter` is
-  // applied to the timeline buckets the player streams from.
+  // `type` drives the fast hero/cover sample (metadata search) for the whole
+  // library; `filter` is applied to the buckets the player streams from.
   type?: 'IMAGE' | 'VIDEO';
+  // When set, this source streams a single album instead of the whole timeline:
+  // buckets come from the album endpoints and the hero/cover pool is sampled
+  // from the album's own assets.
+  albumId?: string;
+  // Direct tile-cover asset (album thumbnail). Lets the tile show a cover from a
+  // single thumbnail fetch WITHOUT triggering the collection's full pool — that
+  // pool (an album walks up to 40 assets) is deferred until the hero needs it.
+  coverAssetId?: string;
   filter: (a: Asset) => boolean;
 }
 
@@ -23,10 +41,34 @@ interface Collection {
 // (webOS has a single hardware media pipeline, so background music and video
 // can't decode at once — see WallpaperPlayer), and mixing silent stills with
 // full-audio clips made for a jarring show.
-const COLLECTIONS: Collection[] = [
+const BASE_COLLECTIONS: Collection[] = [
   { id: 'photos', label: 'Photos', hint: 'Images only', icon: 'wallpaper', type: 'IMAGE', filter: (a) => a.isImage },
   { id: 'videos', label: 'Videos', hint: 'Videos only', icon: 'playCircle', type: 'VIDEO', filter: (a) => a.isVideo },
 ];
+
+// Album source: images only (same no-mix rationale as above — an album's clips
+// would otherwise interrupt the silent slideshow with audio), so it plays in
+// 'photos' mode. assetCount is the whole album; the images-only show may be
+// shorter, which is fine.
+function albumCollection(a: Album): Collection {
+  return {
+    id: 'album:' + a.id,
+    label: a.albumName,
+    hint: a.assetCount + (a.assetCount === 1 ? ' item' : ' items'),
+    icon: 'albums',
+    albumId: a.id,
+    coverAssetId: a.albumThumbnailAssetId ?? undefined,
+    filter: (asset) => asset.isImage,
+  };
+}
+
+// Bucket source per collection: album endpoints when albumId is set, else the
+// whole-library timeline. Same columnar shape either way, so the player is
+// agnostic.
+const bucketsFor = (c: Collection): Promise<TimeBucket[]> =>
+  c.albumId ? getAlbumBuckets(c.albumId) : getTimelineBuckets();
+const bucketFor = (c: Collection, tb: string) =>
+  c.albumId ? getAlbumBucket(c.albumId, tb) : getBucket(tb);
 
 interface Props {
   // register a back handler with the shell; returns true when it consumed Back
@@ -40,7 +82,9 @@ interface Props {
 // below. Selecting a tile gathers that collection and launches the fullscreen
 // slideshow directly.
 export function Wallpaper({ backRef, onFullscreen }: Props) {
-  const [focused, setFocused] = useState<Collection>(COLLECTIONS[0]);
+  // Photos/Videos always; user albums appended once /albums resolves.
+  const [collections, setCollections] = useState<Collection[]>(BASE_COLLECTIONS);
+  const [focused, setFocused] = useState<Collection>(BASE_COLLECTIONS[0]);
   const [player, setPlayer] = useState<Asset[] | null>(null);
   const [playerMode, setPlayerMode] = useState<'photos' | 'videos'>('photos');
   const [preparing, setPreparing] = useState<Collection | null>(null);
@@ -49,8 +93,20 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
   // bumped to cancel an in-flight prepare (Back pressed while preparing)
   const prepToken = useRef(0);
   // paged bucket cursor for the currently-playing collection: buckets load one
-  // at a time as the slideshow nears the end, instead of all up front.
-  const feed = useRef<{ buckets: TimeBucket[]; idx: number; filter: (a: Asset) => boolean; loading: boolean } | null>(null);
+  // at a time as the slideshow nears the end, instead of all up front. `col` is
+  // kept so the pager knows which endpoint (timeline vs album) to fetch from.
+  const feed = useRef<{ col: Collection; buckets: TimeBucket[]; idx: number; filter: (a: Asset) => boolean; loading: boolean } | null>(null);
+  // Debounce hero updates: while the user is moving between tiles, the focus
+  // transition should own the main thread. Only once movement settles (~280ms
+  // of no new focus) do we swap the focused collection, which is what triggers
+  // the hero's (lazy) preview load and crossfade. Prevents the big 4K decode
+  // from competing with the focus animation on every d-pad press.
+  const focusDebounce = useRef<number | undefined>(undefined);
+  const requestHero = useCallback((c: Collection) => {
+    window.clearTimeout(focusDebounce.current);
+    focusDebounce.current = window.setTimeout(() => setFocused(c), 280);
+  }, []);
+  useEffect(() => () => window.clearTimeout(focusDebounce.current), []);
 
   // wire the shell's Back button to pop our internal state
   useEffect(() => {
@@ -79,10 +135,26 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     onFullscreen(!!player);
   }, [player, onFullscreen]);
 
-  // prime 1a, 2a, 3a first, then fill each tile's rest in the background
+  // Load user albums once and append them as sources. Only non-empty albums
+  // (an empty album has no cover and no show).
   useEffect(() => {
-    void primeHeroes(COLLECTIONS);
+    let alive = true;
+    getAlbums()
+      .then((albums) => {
+        if (!alive) return;
+        const cols = albums.filter((a) => a.assetCount > 0).map(albumCollection);
+        if (cols.length) setCollections([...BASE_COLLECTIONS, ...cols]);
+      })
+      .catch(() => {}); // albums unavailable: just keep Photos/Videos
+    return () => {
+      alive = false;
+    };
   }, []);
+
+  // Hero previews load lazily: the mounted Hero fills only the focused
+  // collection (see its effect), so we no longer eagerly load every source's 4K
+  // preview up front. Tile covers still show immediately from a single cheap
+  // thumbnail. This keeps navigation resources free for the focus transition.
 
   // when returning to the home surface, land focus on a tile again
   useEffect(() => {
@@ -98,7 +170,7 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     const f = feed.current;
     if (!f) return [];
     while (f.idx < f.buckets.length) {
-      const cols = await getBucket(f.buckets[f.idx++].timeBucket).catch(() => null);
+      const cols = await bucketFor(f.col, f.buckets[f.idx++].timeBucket).catch(() => null);
       if (prepToken.current !== token) return [];
       const add = cols ? flattenBucket(cols).filter(f.filter) : [];
       if (add.length) return add;
@@ -142,9 +214,9 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     setEmptySource(null);
     setPlayerMode(c.id === 'videos' ? 'videos' : 'photos');
     setPreparing(c);
-    const buckets = await getTimelineBuckets().catch(() => [] as TimeBucket[]);
+    const buckets = await bucketsFor(c).catch(() => [] as TimeBucket[]);
     if (prepToken.current !== token) return; // cancelled via Back
-    feed.current = { buckets, idx: 0, filter: c.filter, loading: false };
+    feed.current = { col: c, buckets, idx: 0, filter: c.filter, loading: false };
     const first = await pullBatch(token); // just the first non-empty bucket
     if (prepToken.current !== token) return;
     setPreparing(null);
@@ -158,11 +230,11 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
       <div class="wp-shelf">
         <h2 class="wp-shelf-title">Choose a source</h2>
         <div class="wp-tiles">
-          {COLLECTIONS.map((c) => (
+          {collections.map((c) => (
             <CollectionTile
               key={c.id}
               collection={c}
-              onFocus={() => setFocused(c)}
+              onFocus={() => requestHero(c)}
               onOpen={() => openCollection(c)}
             />
           ))}
@@ -232,19 +304,32 @@ function heroState(id: string): HeroState {
   return s;
 }
 
-// Random candidate pool per collection via a single type-filtered metadata
-// search (fast even for sparse types like Videos), fetched once and cached.
+// Random candidate pool per collection, fetched once and cached. Whole-library
+// sources use a single type-filtered metadata search (fast even for sparse types
+// like Videos); album sources sample the album's own buckets.
 const poolCache = new Map<string, Promise<Asset[]>>();
 function collectionPool(c: Collection): Promise<Asset[]> {
   let p = poolCache.get(c.id);
   if (!p) {
-    p = searchByType(c.type)
+    p = (c.albumId ? albumPool(c) : searchByType(c.type))
       // skip assets with no generated thumbnail — they 404 on the preview endpoint
-      .then((list) => pickRandom(list.filter((a) => a.thumbhash), list.length))
+      .then((list) => pickRandom(list.filter((a) => a.thumbhash && c.filter(a)), list.length))
       .catch(() => []);
     poolCache.set(c.id, p);
   }
   return p;
+}
+
+// Gather an album's assets for the hero/cover pool by walking its buckets.
+// Capped so a huge album doesn't fetch everything just to seed a few previews.
+async function albumPool(c: Collection): Promise<Asset[]> {
+  const buckets = await getAlbumBuckets(c.albumId!).catch(() => [] as TimeBucket[]);
+  const out: Asset[] = [];
+  for (let i = 0; i < buckets.length && out.length < 40; i++) {
+    const cols = await getAlbumBucket(c.albumId!, buckets[i].timeBucket).catch(() => null);
+    if (cols) out.push(...flattenBucket(cols));
+  }
+  return out;
 }
 
 // Clear all wallpaper caches (hero previews + collection pools) — call on
@@ -252,6 +337,7 @@ function collectionPool(c: Collection): Promise<Asset[]> {
 export function resetWallpaperCaches(): void {
   for (const s of heroStore.values()) s.loaded.forEach((p) => revoke(p.url));
   heroStore.clear();
+  heroLRU.length = 0;
   poolCache.clear();
 }
 
@@ -261,11 +347,36 @@ function heroEmit() {
   heroListeners.forEach((l) => l());
 }
 
+// Hero preview blobs are 4K and uncached (unlike thumbnails), so retaining every
+// visited collection's set would grow unbounded once albums are in the mix (many
+// sources x HERO_MAX). Keep only the few most-recently-focused collections'
+// previews; evict the rest (revoking their object URLs). Base sources
+// (Photos/Videos) are pinned so their heroes stay instant.
+const HERO_KEEP = 4;
+const heroLRU: string[] = [];
+function touchHero(id: string): void {
+  const i = heroLRU.indexOf(id);
+  if (i >= 0) heroLRU.splice(i, 1);
+  heroLRU.push(id);
+  while (heroLRU.length > HERO_KEEP) {
+    const victim = heroLRU.shift()!;
+    if (victim === 'photos' || victim === 'videos') {
+      heroLRU.push(victim); // pinned: never evict the base sources
+      continue;
+    }
+    const st = heroStore.get(victim);
+    if (st) {
+      st.loaded.forEach((p) => revoke(p.url));
+      heroStore.delete(victim); // next visit reloads from scratch
+    }
+  }
+}
+
 // Fill a collection's cache up to `max` previews, resuming from where a prior
 // call stopped. Guarded against overlapping calls; skips unloadable assets.
-// Loaded blobs persist for the app's life.
 async function fillHero(c: Collection, max: number): Promise<void> {
   const st = heroState(c.id);
+  touchHero(c.id); // mark most-recently-used (also evicts stale collections)
   if (st.loading || st.loaded.length >= max) return;
   st.loading = true;
   try {
@@ -282,14 +393,6 @@ async function fillHero(c: Collection, max: number): Promise<void> {
   } finally {
     st.loading = false;
   }
-}
-
-// Prime pass: load the FIRST preview of every collection first (1a, 2a, 3a) so
-// each tile has a hero image the instant it's focused, THEN fill the rest per
-// tile in the background.
-async function primeHeroes(collections: Collection[]): Promise<void> {
-  for (const c of collections) await fillHero(c, 1);
-  for (const c of collections) void fillHero(c, HERO_MAX);
 }
 
 // ---- Hero carousel: crossfading previews of the focused collection ----
@@ -316,9 +419,16 @@ function Hero({ collection }: { collection: Collection }) {
     };
   }, []);
 
-  // resume filling the focused collection to HERO_MAX (no-op if already full)
+  // Load just ONE preview up front so the hero shows immediately on focus, then
+  // top up to HERO_MAX (for the crossfade rotation) lazily a beat later. Loading
+  // all six per focus was the fetch/createObjectURL/GC churn while browsing —
+  // most tiles are passed through, not lingered on, so their extra previews were
+  // decoded for nothing. The top-up is cancelled if focus moves on first.
   useEffect(() => {
-    void fillHero(collection, HERO_MAX);
+    let topUp = 0;
+    void fillHero(collection, 1);
+    topUp = window.setTimeout(() => void fillHero(collection, HERO_MAX), 1200);
+    return () => window.clearTimeout(topUp);
   }, [collection]);
 
   // start each visit from the first cached preview of the focused collection
@@ -331,18 +441,31 @@ function Hero({ collection }: { collection: Collection }) {
     return () => window.clearInterval(t);
   }, [srcs.length]);
 
-  // crossfade to the current preview by loading it into the hidden layer
+  // Crossfade: load the current preview into the hidden layer, but DON'T reveal
+  // it yet — flip the crossfade only once that layer's image has actually
+  // decoded (its onLoad below). This avoids fading to a blank/half-painted layer
+  // and, with the focus debounce upstream, means the 4K decode never starts
+  // mid-navigation. `reveal` records which layer is waiting to be shown.
   const curSrc = srcs[idx] ?? srcs[0] ?? null;
+  const reveal = useRef<'a' | 'b' | null>(null);
   useEffect(() => {
     if (!curSrc) return;
-    const toA = !showARef.current; // reveal via the currently-hidden layer
-    setLayers((prev) => (toA ? { a: curSrc, b: prev.b } : { a: prev.a, b: curSrc }));
+    const toA = !showARef.current; // load into the currently-hidden layer
     showARef.current = toA;
-    setShowA(toA);
+    reveal.current = toA ? 'a' : 'b';
+    setLayers((prev) => (toA ? { a: curSrc, b: prev.b } : { a: prev.a, b: curSrc }));
   }, [curSrc?.url]);
 
   // aim each layer's cover crop at faces once it has decoded (natural size known)
   const aim = (e: Event, p: HeroPreview) => void aimAtFaces(e.currentTarget as HTMLImageElement, p.id);
+  // once the layer awaiting reveal has decoded, run the crossfade to it
+  const onLayerLoad = (e: Event, p: HeroPreview, layer: 'a' | 'b') => {
+    aim(e, p);
+    if (reveal.current === layer) {
+      setShowA(layer === 'a');
+      reveal.current = null;
+    }
+  };
 
   return (
     <div class="wp-hero">
@@ -351,7 +474,7 @@ function Hero({ collection }: { collection: Collection }) {
           class={'wp-hero-img' + (showA ? ' on' : '')}
           src={layers.a.url}
           decoding="async"
-          onLoad={(e) => aim(e, layers.a!)}
+          onLoad={(e) => onLayerLoad(e, layers.a!, 'a')}
         />
       )}
       {layers.b && (
@@ -359,7 +482,7 @@ function Hero({ collection }: { collection: Collection }) {
           class={'wp-hero-img' + (!showA ? ' on' : '')}
           src={layers.b.url}
           decoding="async"
-          onLoad={(e) => aim(e, layers.b!)}
+          onLoad={(e) => onLayerLoad(e, layers.b!, 'b')}
         />
       )}
       <div class="wp-hero-scrim" />
@@ -388,6 +511,18 @@ function CollectionTile({
   const [cover, setCover] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
+    // Prefer a direct cover asset (album thumbnail): one cheap thumbnail fetch,
+    // and it does NOT trigger the collection's full pool — so an album's up-to-40
+    // asset walk stays deferred until its hero is actually focused.
+    if (collection.coverAssetId) {
+      loadThumb(collection.coverAssetId)
+        .then((u) => alive && setCover(u))
+        .catch(() => {}); // fall through to nothing; tile shows the placeholder
+      return () => {
+        alive = false;
+      };
+    }
+    // Photos/Videos (no direct cover): first thumbnail that loads from the pool.
     collectionPool(collection).then(async (list) => {
       // pool is already shuffled — use the first thumbnail that actually loads
       for (const a of list) {
@@ -405,7 +540,7 @@ function CollectionTile({
     return () => {
       alive = false;
     };
-  }, [collection.id, collection.filter]);
+  }, [collection.id, collection.filter, collection.coverAssetId]);
 
   return (
     <button

@@ -1753,6 +1753,14 @@ select {
 .wp-tiles {
   display: flex;
   gap: 18px;
+  /* Scrolls horizontally once albums push the row past the viewport; d-pad
+     focus pans it (see the eased scroll animator's x-axis handling).
+     overflow-x:auto forces overflow-y to clip, which would cut the 3px focus
+     ring; padding gives the ring room inside the scrollport and the equal
+     negative margin cancels it so tiles still align with the shelf title. */
+  overflow-x: auto;
+  padding: 8px;
+  margin: -8px;
 }
 .wp-tile {
   position: relative;
