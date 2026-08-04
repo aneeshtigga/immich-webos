@@ -495,18 +495,44 @@ export interface AssetLocation {
   country?: string;
 }
 
-const locationCache = new Map<string, AssetLocation>();
+interface AssetInfo {
+  location: AssetLocation;
+  // EXIF orientation, normalised to 1 (upright) when absent or unparseable.
+  // Immich returns it as a string; anything other than 1 means the pixels are
+  // stored rotated or mirrored relative to how they should be displayed.
+  orientation: number;
+}
+
+const infoCache = new Map<string, AssetInfo>();
+
+async function getAssetInfo(id: string): Promise<AssetInfo> {
+  const hit = infoCache.get(id);
+  if (hit) return hit;
+  const a = await jsonReq<{
+    exifInfo?: { city?: string; state?: string; country?: string; orientation?: string | null };
+  }>(`/assets/${id}`);
+  const raw = parseInt(a.exifInfo?.orientation ?? '', 10);
+  const info: AssetInfo = {
+    location: {
+      city: a.exifInfo?.city ?? undefined,
+      state: a.exifInfo?.state ?? undefined,
+      country: a.exifInfo?.country ?? undefined,
+    },
+    // A tag we can't read is treated as rotated: displaying a correctly-
+    // oriented photo via the preview costs sharpness, showing a rotated one
+    // costs the shot.
+    orientation: a.exifInfo?.orientation == null ? 1 : isNaN(raw) ? 0 : raw,
+  };
+  infoCache.set(id, info);
+  return info;
+}
 
 export async function getAssetLocation(id: string): Promise<AssetLocation> {
-  if (locationCache.has(id)) return locationCache.get(id)!;
-  const a = await jsonReq<{ exifInfo?: { city?: string; state?: string; country?: string } }>(`/assets/${id}`);
-  const loc: AssetLocation = {
-    city: a.exifInfo?.city ?? undefined,
-    state: a.exifInfo?.state ?? undefined,
-    country: a.exifInfo?.country ?? undefined,
-  };
-  locationCache.set(id, loc);
-  return loc;
+  return (await getAssetInfo(id)).location;
+}
+
+export async function getAssetOrientation(id: string): Promise<number> {
+  return (await getAssetInfo(id)).orientation;
 }
 
 // Detected-face bounding box, normalized to 0..1 of the image. Immich reports

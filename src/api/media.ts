@@ -9,6 +9,25 @@
 import { authedBlobUrl } from './internal-fetch';
 import { thumbnailUrl, personThumbnailUrl } from './client';
 
+// Does the browser rotate an <img> to match its EXIF orientation tag?
+//
+// Chromium only started doing that by default in 81, which is also the version
+// that shipped the `image-orientation` property — so supporting the property is
+// a reliable proxy for the behaviour. webOS 4.x TVs run Chromium 53 and do
+// neither, which is why an original with an orientation tag renders as stored:
+// a portrait shot appears landscape, or upside down for orientation 3.
+//
+// Immich's re-encoded preview has the rotation baked into the pixels, so it is
+// always displayed correctly. Callers use this to decide when that trade
+// (correct but softer) is worth making.
+export const appliesExifOrientation: boolean = (() => {
+  try {
+    return typeof CSS !== 'undefined' && !!CSS.supports && CSS.supports('image-orientation', 'from-image');
+  } catch {
+    return false;
+  }
+})();
+
 // Sized to cover the ~6-page retention window (keepObserver) both directions so
 // scrolling back over recently-seen thumbs is a cache hit, never a refetch. Blobs
 // are small webp (~tens of KB); decoded bitmaps are freed when a Thumb drops its
