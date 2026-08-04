@@ -18,7 +18,45 @@ export interface Asset {
   isFavorite?: boolean; // weights the wallpaper shuffle toward favorites
 }
 
-export function flattenBucket(b: BucketColumns): Asset[] {
+// Pre-columnar Immich (and some proxies) answer /timeline/bucket with a plain
+// list of asset objects instead of parallel arrays. Normalise that shape into
+// BucketColumns so the columnar path below is the only one that matters.
+interface LegacyAsset {
+  id: string;
+  type?: string;
+  duration?: number | string | null;
+  fileCreatedAt?: string;
+  livePhotoVideoId?: string | null;
+  thumbhash?: string | null;
+  isFavorite?: boolean;
+  exifInfo?: { exifImageWidth?: number; exifImageHeight?: number };
+}
+
+function columnsFromList(list: LegacyAsset[]): BucketColumns {
+  const w = (a: LegacyAsset) => a.exifInfo?.exifImageWidth ?? 0;
+  const h = (a: LegacyAsset) => a.exifInfo?.exifImageHeight ?? 0;
+  return {
+    id: list.map((a) => a.id),
+    ratio: list.map((a) => (w(a) && h(a) ? w(a) / h(a) : 1)),
+    isImage: list.map((a) => a.type !== 'VIDEO'),
+    isFavorite: list.map((a) => !!a.isFavorite),
+    isTrashed: list.map(() => false),
+    duration: list.map((a) => a.duration ?? null),
+    livePhotoVideoId: list.map((a) => a.livePhotoVideoId ?? null),
+    fileCreatedAt: list.map((a) => a.fileCreatedAt ?? ''),
+    thumbhash: list.map((a) => a.thumbhash ?? null),
+  };
+}
+
+// Tolerant by design: the bucket payload has changed shape across Immich
+// releases, and a missing column here used to throw a TypeError that took out
+// the whole grid ("Failed to load bucket ..."). Every column is now optional
+// with a sane default, so an unfamiliar server degrades to fewer details
+// instead of an error screen.
+export function flattenBucket(raw: BucketColumns | LegacyAsset[] | null): Asset[] {
+  if (!raw) return [];
+  const b: BucketColumns = Array.isArray(raw) ? columnsFromList(raw) : raw;
+  if (!Array.isArray(b.id)) return [];
   const n = b.id.length;
   // Live Photos come back as two rows: the still (carrying livePhotoVideoId)
   // and its motion video. Immich's web hides the motion half; collect those
@@ -31,7 +69,8 @@ export function flattenBucket(b: BucketColumns): Asset[] {
   const out: Asset[] = [];
   for (let i = 0; i < n; i++) {
     if (motionIds.has(b.id[i])) continue;
-    const isImage = b.isImage[i];
+    // Absent isImage column: assume image unless a duration says otherwise.
+    const isImage = b.isImage ? b.isImage[i] : !b.duration?.[i];
     out.push({
       id: b.id[i],
       isImage,

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'preact/hooks';
 import { memo } from 'preact/compat';
-import { TimeBucket, BucketColumns } from '../api/client';
+import { TimeBucket, BucketColumns, describeError } from '../api/client';
 import { Asset, flattenBucket } from '../api/assets';
 import { Thumb } from './Thumb';
 import { bucketObserver, setLazyRoot } from './lazyObserver';
@@ -113,7 +113,7 @@ export const PhotoGrid = memo(function PhotoGrid({ loadBuckets, loadBucket, onOp
       loadingRef.current.add(tb);
       loadBucket(tb)
         .then((cols) => setLoaded((m) => ({ ...m, [tb]: flattenBucket(cols) })))
-        .catch((e) => reportError(new Error(`Failed to load bucket ${tb}: ${e?.message ?? e}`)))
+        .catch((e) => reportError(new Error(`Failed to load bucket ${tb}: ${describeError(e)}`)))
         .finally(() => loadingRef.current.delete(tb));
     },
     [loadBucket],

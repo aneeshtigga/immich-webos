@@ -53,6 +53,28 @@ function base(): string {
   return getServer() + '/api';
 }
 
+// Build a query string by hand rather than via `new URLSearchParams(record)`.
+//
+// Older webOS ships a URLSearchParams whose constructor only understands a
+// query *string*: handed an object it stringifies it to "[object Object]" and
+// parses that, so every parameter silently disappears and the request goes out
+// bare. It fails quietly — endpoints whose parameters are all optional still
+// answer (/timeline/buckets returns the default timeline, which is why month
+// headers appear at all), so it only surfaces on a call with a required
+// parameter, as HTTP 400 "timeBucket: expected string, received undefined".
+//
+// encodeURIComponent has been universal since ES3, so this is safe everywhere.
+function qs(params: Record<string, string | undefined>): string {
+  const parts: string[] = [];
+  for (const key in params) {
+    if (!Object.prototype.hasOwnProperty.call(params, key)) continue;
+    const value = params[key];
+    if (value === undefined || value === null) continue;
+    parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
+  }
+  return parts.join('&');
+}
+
 function authHeaders(): Record<string, string> {
   return getAuthHeaders();
 }
@@ -78,6 +100,38 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+// Turn whatever a failed call produced into one short line fit for a TV screen.
+// Immich has used two error envelopes: pre-v3 put validation failures in a
+// `message` array, v3 moved them to `errors: [{ path, message }]`. Unwrap both,
+// and fall back to the raw body for anything else (a reverse proxy's HTML 502,
+// say). Non-ApiError values are usually a TypeError from parsing an unexpected
+// payload — keep the name so that stays distinguishable from a server refusal.
+export function describeError(e: unknown): string {
+  if (e instanceof ApiError) {
+    let detail = e.message;
+    try {
+      const body = JSON.parse(e.message) as {
+        message?: string | string[];
+        errors?: { path?: string; message?: string }[];
+      };
+      if (body.errors?.length) {
+        detail = body.errors
+          .map((x) => (x.path ? x.path + ': ' + x.message : x.message))
+          .join('; ');
+      } else if (Array.isArray(body.message)) {
+        detail = body.message.join('; ');
+      } else if (body.message) {
+        detail = body.message;
+      }
+    } catch {
+      // not JSON — keep the raw body
+    }
+    return 'HTTP ' + e.status + ' — ' + detail.slice(0, 300);
+  }
+  if (e instanceof Error) return e.name + ': ' + e.message;
+  return String(e);
 }
 
 // --- Auth ---
@@ -153,47 +207,129 @@ export async function validateToken(): Promise<boolean> {
 // within each bucket, so a whole section reads oldest-to-newest end to end.
 export type Order = 'asc' | 'desc';
 
-// Some Immich server versions return timeBucket in short form ("2026-07-01")
-// from /timeline/buckets, but /timeline/bucket expects the full ISO form
-// ("2026-07-01T00:00:00.000Z"). Normalise before sending the query back.
-const padBucket = (tb: string): string =>
-  tb.length === 10 ? tb + 'T00:00:00.000Z' : tb;
+// --- Bucket key formats ---
+//
+// /timeline/buckets hands back a key that /timeline/bucket wants echoed back,
+// but which form is accepted has moved around across Immich releases:
+//
+//   'day' — "2026-07-01". What current servers return AND expect.
+//   'iso' — "2026-07-01T00:00:00.000Z". What some builds require instead; the
+//           official web client hit the same split (immich-app/immich#20438).
+//
+// Worse, a server that dislikes the form it was sent may either reject it
+// (400 "timeBucket must be a string") or silently answer 200 with empty
+// arrays — so we can't detect the mismatch from the status code alone.
+// Some servers also emit an unpadded key ("2026-8-1") that they then refuse
+// to accept back, so every form is zero-padded before it goes out.
+//
+// Rather than hardcode a guess, negotiate once per session: try the preferred
+// form, and if it 400s or comes back with zero assets, retry with the other
+// and remember whichever worked. See resolveBucket() below.
+type BucketFormat = 'day' | 'iso';
+
+const pad2 = (s: string): string => (s.length === 1 ? '0' + s : s);
+
+// "2026-8-1" / "2026-08-1" -> "2026-08-01". Anything that isn't a bare
+// year-month-day (already a full ISO timestamp, say) is passed through.
+function toDayKey(tb: string): string {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(tb);
+  return m ? m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]) : tb;
+}
+
+function toIsoKey(tb: string): string {
+  const day = toDayKey(tb);
+  return day.length === 10 ? day + 'T00:00:00.000Z' : day;
+}
+
+const formatKey = (tb: string, f: BucketFormat): string =>
+  f === 'iso' ? toIsoKey(tb) : toDayKey(tb);
+
+// Sticky once a form is known to work, so we pay the probe at most once —
+// but only for the server it was learned from, so pointing the app at a
+// different Immich re-probes instead of inheriting the wrong answer.
+let learned: { server: string; format: BucketFormat } | null = null;
+
+function knownFormat(): BucketFormat | null {
+  return learned && learned.server === getServer() ? learned.format : null;
+}
+
+function rememberFormat(format: BucketFormat): void {
+  learned = { server: getServer(), format };
+}
+
+const isEmptyBucket = (c: BucketColumns): boolean =>
+  !c || !Array.isArray(c.id) || c.id.length === 0;
+
+// Run `send` against each candidate form until one yields a non-empty bucket.
+// A bucket only exists because /timeline/buckets said it holds assets, so an
+// empty answer means the key was wrong, not that the month is empty.
+async function resolveBucket(
+  timeBucket: string,
+  send: (key: string) => Promise<BucketColumns>,
+): Promise<BucketColumns> {
+  const known = knownFormat();
+  const candidates: BucketFormat[] = known ? [known] : ['day', 'iso'];
+  let lastErr: unknown = null;
+  let lastEmpty: BucketColumns | null = null;
+
+  for (const f of candidates) {
+    try {
+      const cols = await send(formatKey(timeBucket, f));
+      if (!isEmptyBucket(cols)) {
+        rememberFormat(f);
+        return cols;
+      }
+      lastEmpty = cols;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  // Every form came back empty: genuinely nothing here (or a server we can't
+  // satisfy). Hand back the empty response rather than failing the section.
+  if (lastEmpty) return lastEmpty;
+  throw lastErr ?? new Error('bucket request failed');
+}
 
 // Default timeline query: own assets, exclude trashed. Order defaults to newest
 // first; callers pass the user's saved per-section direction.
 export async function getTimelineBuckets(order: Order = 'desc'): Promise<TimeBucket[]> {
-  const q = new URLSearchParams({ isTrashed: 'false', order });
-  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q.toString());
+  const q = qs({ isTrashed: 'false', order });
+  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q);
 }
 
 export async function getBucket(
   timeBucket: string,
   order: Order = 'desc',
 ): Promise<BucketColumns> {
-  const q = new URLSearchParams({
-    timeBucket: padBucket(timeBucket),
-    isTrashed: 'false',
-    order,
+  return resolveBucket(timeBucket, (key) => {
+    const q = qs({
+      timeBucket: key,
+      isTrashed: 'false',
+      order,
+    });
+    return jsonReq<BucketColumns>('/timeline/bucket?' + q);
   });
-  return jsonReq<BucketColumns>('/timeline/bucket?' + q.toString());
 }
 
 export async function getFavoriteBuckets(order: Order = 'desc'): Promise<TimeBucket[]> {
-  const q = new URLSearchParams({ isTrashed: 'false', isFavorite: 'true', order });
-  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q.toString());
+  const q = qs({ isTrashed: 'false', isFavorite: 'true', order });
+  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q);
 }
 
 export async function getFavoriteBucket(
   timeBucket: string,
   order: Order = 'desc',
 ): Promise<BucketColumns> {
-  const q = new URLSearchParams({
-    timeBucket: padBucket(timeBucket),
-    isTrashed: 'false',
-    isFavorite: 'true',
-    order,
+  return resolveBucket(timeBucket, (key) => {
+    const q = qs({
+      timeBucket: key,
+      isTrashed: 'false',
+      isFavorite: 'true',
+      order,
+    });
+    return jsonReq<BucketColumns>('/timeline/bucket?' + q);
   });
-  return jsonReq<BucketColumns>('/timeline/bucket?' + q.toString());
 }
 
 // --- Albums ---
@@ -217,8 +353,8 @@ export async function getAlbumBuckets(
   albumId: string,
   order: Order = 'desc',
 ): Promise<TimeBucket[]> {
-  const q = new URLSearchParams({ albumId, order });
-  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q.toString());
+  const q = qs({ albumId, order });
+  return jsonReq<TimeBucket[]>('/timeline/buckets?' + q);
 }
 
 export async function getAlbumBucket(
@@ -226,8 +362,10 @@ export async function getAlbumBucket(
   timeBucket: string,
   order: Order = 'desc',
 ): Promise<BucketColumns> {
-  const q = new URLSearchParams({ albumId, timeBucket: padBucket(timeBucket), order });
-  return jsonReq<BucketColumns>('/timeline/bucket?' + q.toString());
+  return resolveBucket(timeBucket, (key) => {
+    const q = qs({ albumId, timeBucket: key, order });
+    return jsonReq<BucketColumns>('/timeline/bucket?' + q);
+  });
 }
 
 // --- Search ---
@@ -424,11 +562,11 @@ export function originalUrl(id: string): string {
 
 // Direct streaming URL (token in query). Used as a plain <video src>.
 export function videoStreamUrl(id: string): string {
-  const q = new URLSearchParams(getAuthQuery());
-  return `${base()}/assets/${id}/video/playback?${q.toString()}`;
+  const q = qs(getAuthQuery());
+  return `${base()}/assets/${id}/video/playback?${q}`;
 }
 
 export function originalStreamUrl(id: string): string {
-  const q = new URLSearchParams(getAuthQuery());
-  return `${base()}/assets/${id}/original?${q.toString()}`;
+  const q = qs(getAuthQuery());
+  return `${base()}/assets/${id}/original?${q}`;
 }
