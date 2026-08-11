@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import { Asset } from '../api/assets';
-import { loadBlobUrl, revoke } from '../api/media';
-import { thumbnailUrl, videoStreamUrl, originalUrl, getAssetLocation } from '../api/client';
+import { loadBlobUrl, revoke, appliesExifOrientation } from '../api/media';
+import { thumbnailUrl, videoStreamUrl, originalUrl, getAssetLocation, getAssetOrientation } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { fetchStations, Station } from '../api/radio';
 import { keepAwake } from '../api/screensaver';
@@ -269,7 +269,20 @@ export function WallpaperPlayer({ assets: assetsProp, mode, onExit, onNearEnd, o
       }
 
       try {
-        const src = await loadBlobUrl(originalUrl(a.id));
+        // On sets that don't auto-apply EXIF orientation (Chromium < 81, i.e.
+        // webOS 4.x), an original carrying an orientation tag paints rotated.
+        // Only those assets fall back to the preview, which Immich re-encodes
+        // upright — everything else keeps full original resolution. The lookup
+        // is free: /assets/{id} is already fetched and cached for the caption.
+        let bakeRotation = false;
+        if (!appliesExifOrientation) {
+          bakeRotation = await getAssetOrientation(a.id)
+            .then((o) => o !== 1)
+            .catch(() => false); // unreachable info: keep today's behaviour
+        }
+        const src = await loadBlobUrl(
+          bakeRotation ? thumbnailUrl(a.id, 'preview') : originalUrl(a.id),
+        );
         // Build and fully DECODE the actual <img> element before caching, then
         // reuse THAT element on screen (mounted via ref, like videos). A still
         // is "loaded" only once its real element can paint instantly. Decoding a
