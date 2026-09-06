@@ -1491,6 +1491,15 @@ select {
   border-radius: 3px;
   pointer-events: none; /* clicks land on the track, not the fill */
 }
+.fs-seek-buffer {
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 3px;
+  pointer-events: none;
+}
 /* draggable knob at the play head */
 .fs-seek-knob {
   position: absolute;

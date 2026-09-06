@@ -46,7 +46,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [thumbSrc, setThumbSrc] = useState<string | null>(null);
   const [location, setLocation] = useState<string | null>(null);
   const [paused, setPaused] = useState(true);
-  const [progress, setProgress] = useState({ cur: 0, dur: 0 });
+  const [progress, setProgress] = useState({ cur: 0, dur: 0, buffered: 0 });
   // remembered across assets and restarts (see settings.getVideoQuality)
   const [quality, setQuality] = useState<Quality>(getVideoQuality);
   // When the user has toggled "hide overlay" in the grid header, the viewer
@@ -212,7 +212,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   // over to every video and persists across restarts)
   useEffect(() => {
     setVideoErr(false);
-    setProgress({ cur: 0, dur: 0 });
+    setProgress({ cur: 0, dur: 0, buffered: 0 });
     resumeAt.current = 0;
     setPaused(!isVideo); // videos start in playing intent (autoplay)
     setBuffering(isVideo); // a fresh video is loading until it can play
@@ -232,6 +232,24 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     [i, assets.length],
   );
 
+  const updateProgress = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    let buffered = 0;
+    try {
+      for (let k = 0; k < v.buffered.length; k++) {
+        const start = v.buffered.start(k);
+        const end = v.buffered.end(k);
+        if (v.currentTime >= start && v.currentTime <= end) {
+          buffered = end;
+          break;
+        }
+      }
+    } catch {
+    }
+    setProgress({ cur: v.currentTime, dur: v.duration || 0, buffered });
+  }, []);
+
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -242,8 +260,8 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     const v = videoRef.current;
     if (!v) return;
     v.currentTime = Math.max(0, Math.min(v.duration || 1e9, v.currentTime + delta));
-    setProgress({ cur: v.currentTime, dur: v.duration || 0 });
-  }, []);
+    updateProgress();
+  }, [updateProgress]);
 
   // Pointer scrubbing on the seek bar — works for PC mouse and the LG
   // magic-remote pointer (both emit pointer events). Maps the x position within
@@ -256,8 +274,8 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     const rect = bar.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     v.currentTime = frac * v.duration;
-    setProgress({ cur: v.currentTime, dur: v.duration });
-  }, []);
+    updateProgress();
+  }, [updateProgress]);
 
   const onSeekDown = useCallback(
     (e: PointerEvent) => {
@@ -356,6 +374,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
 
   const videoSrc = quality === 'original' ? originalStreamUrl(asset.id) : videoStreamUrl(asset.id);
   const pct = progress.dur > 0 ? (progress.cur / progress.dur) * 100 : 0;
+  const bufferedPct = progress.dur > 0 ? Math.min(100, (progress.buffered / progress.dur) * 100) : 0;
   const atStart = i === 0;
   const atEnd = i === assets.length - 1;
 
@@ -376,20 +395,22 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
               setPaused(false);
               poke(false);
             }}
-            onPlaying={() => setBuffering(false)}
-            onCanPlay={() => setBuffering(false)}
-            onWaiting={() => setBuffering(true)}
+            onPlaying={() => { setBuffering(false); updateProgress(); }}
+            onCanPlay={() => { setBuffering(false); updateProgress(); }}
+            onProgress={updateProgress}
+            onDurationChange={updateProgress}
+            onWaiting={() => { setBuffering(true); updateProgress(); }}
             onPause={() => {
               setPaused(true);
               setOverlay(true);
+              updateProgress();
             }}
             onLoadedMetadata={() => {
               const v = videoRef.current;
               if (v && resumeAt.current) v.currentTime = resumeAt.current;
             }}
             onTimeUpdate={() => {
-              const v = videoRef.current;
-              if (v) setProgress({ cur: v.currentTime, dur: v.duration || 0 });
+              updateProgress();
             }}
             onEnded={() => setPaused(true)}
             onError={() => {
@@ -504,6 +525,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
               onPointerUp={onSeekUp}
               onPointerCancel={onSeekUp}
             >
+              <div class="fs-seek-buffer" style={{ width: `${bufferedPct}%` }} />
               <div class="fs-seek-fill" style={{ width: `${pct}%` }}>
                 <span class="fs-seek-knob" />
               </div>
