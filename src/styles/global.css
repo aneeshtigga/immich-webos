@@ -1321,6 +1321,42 @@ select {
 .fs-img.motion-revealed {
   opacity: 0;
 }
+/* zoomed still: transform is driven inline (scale + pan). Show a grab cursor
+   for the magic-remote pointer / mouse; the opacity transition above must not
+   apply to transform or panning would lag, so pin the transition to opacity. */
+.fs-img.zoomed {
+  cursor: grab;
+  transition: opacity 600ms ease-in-out;
+}
+
+/* zoom minimap: overview of the whole photo, top-right, with a rectangle
+   marking the visible region. z-index above the media, below nothing that
+   needs clicking (it's non-interactive). */
+.fs-minimap {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 3;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.fs-minimap img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* the visible-region box; the huge spread box-shadow dims everything outside it */
+.fs-minimap-box {
+  position: absolute;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+}
 
 /* Centered indeterminate spinner while media loads. Byte-level progress isn't
    available (blob fetch + <video> buffering expose no reliable %), so this is a

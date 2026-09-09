@@ -25,6 +25,21 @@ interface Props {
 type Quality = 'transcoded' | 'original';
 const SEEK_STEP = 10; // seconds
 const HIDE_MS = 5000;
+const ZOOM_STEP = 1.2; // scale multiplier per scroll-wheel tick
+const MAX_ZOOM = 6;
+const PAN_KEY_STEP = 120; // px the d-pad nudges a zoomed photo
+
+// Keep a zoomed photo's pan within bounds so it can't be dragged fully off
+// screen: at scale z the image overhangs the viewport by (z-1) on each axis,
+// so the max offset is half of that overhang.
+function clampPan(x: number, y: number, z: number): { x: number; y: number } {
+  const maxX = ((z - 1) * window.innerWidth) / 2;
+  const maxY = ((z - 1) * window.innerHeight) / 2;
+  return {
+    x: Math.max(-maxX, Math.min(maxX, x)),
+    y: Math.max(-maxY, Math.min(maxY, y)),
+  };
+}
 
 // Unified fullscreen viewer for photos and videos with an auto-hiding overlay.
 //
@@ -77,6 +92,15 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const seekRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const nearEndFiredRef = useRef(0);
+
+  // ---- photo zoom (magic-remote scroll wheel) ----
+  // zoom scales the still; pan offsets it (px). Both reset per photo. zoomRef
+  // mirrors zoom so the keydown/pointer handlers read it without re-subscribing.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  zoomRef.current = zoom;
+  const panDragRef = useRef({ on: false, x: 0, y: 0 });
 
   const asset = assets[i];
   const isVideo = !!asset?.isVideo;
@@ -296,6 +320,59 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     setVideoErr(false);
   }, []);
 
+  // reset zoom when the photo changes
+  useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [asset?.id]);
+
+  const zoomBy = useCallback((inward: boolean) => {
+    const z = zoomRef.current;
+    const next = Math.min(MAX_ZOOM, Math.max(1, inward ? z * ZOOM_STEP : z / ZOOM_STEP));
+    setZoom(next);
+    setPan((p) => (next <= 1.001 ? { x: 0, y: 0 } : clampPan(p.x, p.y, next)));
+  }, []);
+
+  // Scroll wheel (LG magic remote / mouse) zooms the still. Photos only.
+  const onWheel = useCallback(
+    (e: WheelEvent) => {
+      if (isVideo) return;
+      e.preventDefault();
+      poke(true);
+      zoomBy(e.deltaY < 0);
+    },
+    [isVideo, poke, zoomBy],
+  );
+
+  // Pointer drag pans a zoomed photo (magic-remote pointer / mouse). Handlers
+  // sit on the .fs root and fire via bubbling, so overlay buttons still click.
+  const onImgDown = useCallback(
+    (e: PointerEvent) => {
+      if (isVideo || zoomRef.current <= 1) return;
+      e.preventDefault();
+      panDragRef.current = { on: true, x: e.clientX, y: e.clientY };
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      poke(true);
+    },
+    [isVideo, poke],
+  );
+  const onImgMove = useCallback(
+    (e: PointerEvent) => {
+      if (!panDragRef.current.on) return;
+      const dx = e.clientX - panDragRef.current.x;
+      const dy = e.clientY - panDragRef.current.y;
+      panDragRef.current.x = e.clientX;
+      panDragRef.current.y = e.clientY;
+      setPan((p) => clampPan(p.x + dx, p.y + dy, zoomRef.current));
+      poke(true);
+    },
+    [poke],
+  );
+  const onImgUp = useCallback((e: PointerEvent) => {
+    panDragRef.current.on = false;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  }, []);
+
   // ---- key handling: fixed media semantics ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -337,6 +414,26 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
       }
 
       // photo
+      // Zoomed in: arrows pan the image and OK/Enter resets to fit. This takes
+      // priority over prev/next and live-play so the d-pad can steer the zoom.
+      if (zoomRef.current > 1) {
+        if (code === Key.Enter || code === Key.PlayPause) {
+          e.preventDefault();
+          setZoom(1);
+          setPan({ x: 0, y: 0 });
+          return;
+        }
+        if (dir) {
+          e.preventDefault();
+          const z = zoomRef.current;
+          setPan((p) => {
+            const dx = dir === 'left' ? PAN_KEY_STEP : dir === 'right' ? -PAN_KEY_STEP : 0;
+            const dy = dir === 'up' ? PAN_KEY_STEP : dir === 'down' ? -PAN_KEY_STEP : 0;
+            return clampPan(p.x + dx, p.y + dy, z);
+          });
+          return;
+        }
+      }
       if (livePhotoId && (code === Key.Enter || code === Key.PlayPause)) {
         e.preventDefault();
         toggleLivePlay(); // OK/Enter turns live play on/off (persisted) + applies now
@@ -359,8 +456,64 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const atStart = i === 0;
   const atEnd = i === assets.length - 1;
 
+  // ---- zoom minimap ----
+  // While zoomed, a small overview shows the whole photo with a rectangle
+  // marking the visible region. Compute the rectangle from the contain-fit
+  // size, the current scale, and the pan (all in screen px). Null when not
+  // zoomed so the overview stays hidden.
+  const miniImg = thumbSrc || imgSrc;
+  let mini: {
+    w: number;
+    h: number;
+    box: { left: string; top: string; width: string; height: string };
+  } | null = null;
+  if (!isVideo && zoom > 1 && miniImg) {
+    const imgAspect = asset.ratio && asset.ratio > 0 ? asset.ratio : 1;
+    const Vw = window.innerWidth;
+    const Vh = window.innerHeight;
+    const viewAspect = Vw / Vh;
+    // contain-fit size at scale 1
+    let baseW: number, baseH: number;
+    if (imgAspect > viewAspect) {
+      baseW = Vw;
+      baseH = Vw / imgAspect;
+    } else {
+      baseH = Vh;
+      baseW = Vh * imgAspect;
+    }
+    const Sw = baseW * zoom;
+    const Sh = baseH * zoom;
+    const fx = Math.min(1, Vw / Sw);
+    const fy = Math.min(1, Vh / Sh);
+    // viewport center offset from image center (pan moves the image, so the
+    // view center moves opposite), normalized to the scaled image.
+    const cx = 0.5 - pan.x / Sw;
+    const cy = 0.5 - pan.y / Sh;
+    const bx = Math.max(0, Math.min(1 - fx, cx - fx / 2));
+    const by = Math.max(0, Math.min(1 - fy, cy - fy / 2));
+    const MINI_W = 220;
+    mini = {
+      w: MINI_W,
+      h: Math.round(MINI_W / imgAspect),
+      box: {
+        left: bx * 100 + '%',
+        top: by * 100 + '%',
+        width: fx * 100 + '%',
+        height: fy * 100 + '%',
+      },
+    };
+  }
+
   return (
-    <div class={'fs ' + (overlay ? 'show-ui' : '')} onMouseMove={() => poke(true)}>
+    <div
+      class={'fs ' + (overlay ? 'show-ui' : '')}
+      onMouseMove={() => poke(true)}
+      onWheel={onWheel}
+      onPointerDown={onImgDown}
+      onPointerMove={onImgMove}
+      onPointerUp={onImgUp}
+      onPointerCancel={onImgUp}
+    >
       {/* media */}
       {isVideo ? (
         videoErr && quality === 'original' ? (
@@ -436,8 +589,9 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
               layer). */}
           {imgSrc && (
             <img
-              class={'fs-img' + (motionVisible ? ' motion-revealed' : '')}
+              class={'fs-img' + (motionVisible ? ' motion-revealed' : '') + (zoom > 1 ? ' zoomed' : '')}
               src={imgSrc}
+              style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
               onLoad={() => setImgReady(true)}
             />
           )}
@@ -447,6 +601,14 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
       {/* centered loading spinner: photo not yet decoded, or video buffering */}
       {((!isVideo && !imgReady) || (isVideo && buffering && !videoErr)) && (
         <div class="fs-spinner" />
+      )}
+
+      {/* zoom minimap: whole photo + visible-region rectangle */}
+      {mini && miniImg && (
+        <div class="fs-minimap" style={{ width: `${mini.w}px`, height: `${mini.h}px` }}>
+          <img src={miniImg} />
+          <div class="fs-minimap-box" style={mini.box} />
+        </div>
       )}
 
       {/* overlay UI */}
