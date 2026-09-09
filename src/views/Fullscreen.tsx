@@ -615,10 +615,13 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
       <div class="fs-ui">
         {/* top bar */}
         <div class="fs-top">
-          <button class="fs-btn" onClick={() => onClose(i)} title="Back to grid">
-            <Icon name="back" size={28} />
-            <span>Back</span>
-          </button>
+          {/* hide Back while zoomed so the d-pad/pointer drive the zoom */}
+          {zoom === 1 && (
+            <button class="fs-btn" onClick={() => onClose(i)} title="Back to grid">
+              <Icon name="back" size={28} />
+              <span>Back</span>
+            </button>
+          )}
           <div class="fs-top-right">
             {location && <span class="fs-location">{location}</span>}
             {livePhotoId && (
@@ -639,13 +642,13 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
           </div>
         </div>
 
-        {/* side nav arrows */}
-        {!atStart && (
+        {/* side nav arrows — hidden while zoomed (arrows pan the photo) */}
+        {zoom === 1 && !atStart && (
           <button class="fs-arrow left" onClick={() => go(-1)} title="Previous">
             <Icon name="chevronLeft" size={48} />
           </button>
         )}
-        {!atEnd && (
+        {zoom === 1 && !atEnd && (
           <button class="fs-arrow right" onClick={() => go(1)} title="Next">
             <Icon name="chevronRight" size={48} />
           </button>
