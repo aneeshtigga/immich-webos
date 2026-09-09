@@ -1787,13 +1787,30 @@ select {
   color: var(--fg);
 }
 .wp-tiles {
+  position: relative;
+  overflow: hidden; /* clip the sliding track; previous tiles peek at the left */
+  /* full-bleed: cancel the shelf's L/R padding so the strip spans edge to edge
+     (previous tiles fill the left gutter; the strip reaches the right edge).
+     The selected tile is re-inset to LEFT_INSET in JS so it sits under the
+     title. Keep these in sync with .wp-shelf padding. */
+  margin-left: -142px;
+  margin-right: -48px;
+  padding: 5px 0; /* room so the selected tile's focus ring isn't clipped */
+}
+.wp-track {
   display: flex;
   gap: 18px;
+  align-items: flex-end; /* bottom-align mixed-height tiles (16:9 + square) */
+  width: max-content;
+  transform: translateX(0);
+  transition: transform 260ms ease;
+  will-change: transform;
 }
+/* every source tile is a rounded square (icon top-left, title bottom-left) */
 .wp-tile {
   position: relative;
-  width: 340px;
-  aspect-ratio: 16 / 9;
+  width: 191px;
+  height: 191px;
   border: none;
   padding: 0;
   border-radius: 12px;
@@ -1801,6 +1818,28 @@ select {
   background: var(--surface-2);
   cursor: pointer;
   flex: 0 0 auto;
+}
+/* generic tile art for sources without a real cover (Photos / Videos): a large
+   dimmed icon centered on the surface. */
+.wp-tile-generic {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.16);
+}
+/* selected (left-slot) tile keeps a ring even when focus is elsewhere */
+.wp-tile.selected {
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.wp-tile-icon {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  display: flex;
+  color: #fff;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.65));
 }
 .wp-tile-img {
   width: 100%;
@@ -1824,10 +1863,18 @@ select {
   right: 14px;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   font-size: 19px;
   font-weight: 600;
   color: #fff;
+  /* buttons default to text-align:center, which centers wrapped multi-line
+     titles — force left. */
+  text-align: left;
+}
+.wp-tile-label-text {
+  flex: 1;
+  min-width: 0;
 }
 
 /* "Preparing…" overlay while a collection's assets are gathered */

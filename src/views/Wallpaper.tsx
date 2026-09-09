@@ -1,12 +1,24 @@
-import { useEffect, useState, useRef, useCallback } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'preact/hooks';
 import { Asset, flattenBucket } from '../api/assets';
-import { getTimelineBuckets, getBucket, thumbnailUrl, searchByType, TimeBucket } from '../api/client';
+import {
+  getTimelineBuckets,
+  getBucket,
+  getAlbums,
+  getAlbumBuckets,
+  getAlbumBucket,
+  thumbnailUrl,
+  searchByType,
+  TimeBucket,
+  BucketColumns,
+  Order,
+} from '../api/client';
 import { loadThumb, loadBlobUrl, revoke } from '../api/media';
 import { Icon } from '../components/Icon';
 import { IconName } from '../components/icons';
 import { WallpaperPlayer } from './WallpaperPlayer';
 import { aimAtFaces } from './faceCrop';
 import { EmptyState } from '../components/EmptyState';
+import { Key } from '../nav/keys';
 
 interface Collection {
   id: string;
@@ -14,9 +26,19 @@ interface Collection {
   hint: string;
   icon: IconName;
   // `type` drives the fast hero/cover sample (metadata search); `filter` is
-  // applied to the timeline buckets the player streams from.
+  // applied to the buckets the player streams from.
   type?: 'IMAGE' | 'VIDEO';
   filter: (a: Asset) => boolean;
+  // When set, this source is a single album: the feed streams that album's
+  // buckets (in `order`, ascending by default) instead of the whole timeline,
+  // and the hero/cover sample from the album rather than a type search.
+  albumId?: string;
+  // Cover thumbnail id for album tiles (the album's own thumbnail), so the tile
+  // doesn't have to fetch a whole pool just to show a cover.
+  coverId?: string;
+  // Playback order for this source. Albums default to 'asc' (oldest first);
+  // the timeline collections stay 'desc' (newest first).
+  order?: Order;
 }
 
 // No combined photos+videos collection: videos play with their ORIGINAL audio
@@ -24,9 +46,16 @@ interface Collection {
 // can't decode at once — see WallpaperPlayer), and mixing silent stills with
 // full-audio clips made for a jarring show.
 const COLLECTIONS: Collection[] = [
-  { id: 'photos', label: 'Photos', hint: 'Images only', icon: 'wallpaper', type: 'IMAGE', filter: (a) => a.isImage },
-  { id: 'videos', label: 'Videos', hint: 'Videos only', icon: 'playCircle', type: 'VIDEO', filter: (a) => a.isVideo },
+  { id: 'photos', label: 'Photos', hint: 'All photos', icon: 'wallpaper', type: 'IMAGE', filter: (a) => a.isImage },
+  { id: 'videos', label: 'Videos', hint: 'All videos', icon: 'playCircle', type: 'VIDEO', filter: (a) => a.isVideo },
 ];
+
+// LEFT_INSET is where the selected tile is pinned: the shelf's left padding, so
+// it lines up under the "Choose a source" title (must match .wp-shelf
+// padding-left). Tiles render in a fixed row and the whole track slides so the
+// selected one reaches LEFT_INSET; earlier tiles physically sit to its left
+// (full-bleed strip), so the slide animates smoothly.
+const LEFT_INSET = 142;
 
 interface Props {
   // register a back handler with the shell; returns true when it consumed Back
@@ -40,17 +69,37 @@ interface Props {
 // below. Selecting a tile gathers that collection and launches the fullscreen
 // slideshow directly.
 export function Wallpaper({ backRef, onFullscreen }: Props) {
+  // Fixed timeline sources first, then one tile per album (loaded async). Albums
+  // play oldest-first (order 'asc'); photos are images only.
+  const [collections, setCollections] = useState<Collection[]>(COLLECTIONS);
+  // Carousel: the SELECTED source is pinned to the left; left/right slide the
+  // whole strip rather than moving focus. For a seamless loop we render THREE
+  // copies of the list and track a CONTINUOUS position `pos`; the real selected
+  // index is `pos mod n`. After a slide that runs off the center copy we
+  // silently recenter (jump by n tiles with no animation — invisible because
+  // the copies are identical). See the layout effect + onTransitionEnd below.
+  const [pos, setPos] = useState(0);
+  const skipAnim = useRef(false);
+  const prevLen = useRef(0);
   const [focused, setFocused] = useState<Collection>(COLLECTIONS[0]);
   const [player, setPlayer] = useState<Asset[] | null>(null);
   const [playerMode, setPlayerMode] = useState<'photos' | 'videos'>('photos');
   const [preparing, setPreparing] = useState<Collection | null>(null);
   const [emptySource, setEmptySource] = useState<Collection | null>(null);
   const homeRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   // bumped to cancel an in-flight prepare (Back pressed while preparing)
   const prepToken = useRef(0);
   // paged bucket cursor for the currently-playing collection: buckets load one
   // at a time as the slideshow nears the end, instead of all up front.
-  const feed = useRef<{ buckets: TimeBucket[]; idx: number; filter: (a: Asset) => boolean; loading: boolean } | null>(null);
+  const feed = useRef<{
+    buckets: TimeBucket[];
+    idx: number;
+    filter: (a: Asset) => boolean;
+    loading: boolean;
+    order: Order; // drives the shuffle-off resort direction
+    fetchBucket: (timeBucket: string) => Promise<BucketColumns | null>;
+  } | null>(null);
 
   // wire the shell's Back button to pop our internal state
   useEffect(() => {
@@ -79,9 +128,36 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     onFullscreen(!!player);
   }, [player, onFullscreen]);
 
-  // prime 1a, 2a, 3a first, then fill each tile's rest in the background
+  // prime the fixed tiles' heroes first (albums fill lazily on focus, so a big
+  // album list doesn't fire a fetch storm on mount)
   useEffect(() => {
     void primeHeroes(COLLECTIONS);
+  }, []);
+
+  // append one source tile per album (photos, oldest-first)
+  useEffect(() => {
+    let alive = true;
+    getAlbums()
+      .then((albums) => {
+        if (!alive) return;
+        const albumCols: Collection[] = albums
+          .filter((a) => a.assetCount > 0)
+          .map((a) => ({
+            id: 'album:' + a.id,
+            label: a.albumName,
+            hint: `Album • ${a.assetCount} ${a.assetCount === 1 ? 'item' : 'items'}`,
+            icon: 'albums' as IconName,
+            filter: (asset: Asset) => asset.isImage,
+            albumId: a.id,
+            coverId: a.albumThumbnailAssetId ?? undefined,
+            order: 'asc' as Order,
+          }));
+        setCollections([...COLLECTIONS, ...albumCols]);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // when returning to the home surface, land focus on a tile again
@@ -92,13 +168,79 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     }, 0);
   }, [player]);
 
+  const n = collections.length;
+  const realIndex = n ? (((pos % n) + n) % n) : 0;
+
+  // hero follows the selected collection
+  useEffect(() => {
+    if (n) setFocused(collections[realIndex]);
+  }, [realIndex, collections, n]);
+
+  // Slide the track so the selected tile sits at LEFT_INSET. Normally animated
+  // (CSS transition on .wp-track); when recentering after a loop we suppress the
+  // animation for one frame so the jump is invisible. Also keep focus on the
+  // selected tile while navigating the carousel (not when focus is elsewhere).
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    const sel = track?.querySelector<HTMLElement>('.wp-tile.selected');
+    if (!track || !sel) return;
+    // the tile list grew (albums loaded) — reposition without a slide
+    if (prevLen.current !== n) {
+      prevLen.current = n;
+      skipAnim.current = true;
+    }
+    if (skipAnim.current) {
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${LEFT_INSET - sel.offsetLeft}px)`;
+      void track.offsetWidth; // force reflow so the next change animates again
+      track.style.transition = '';
+      skipAnim.current = false;
+    } else {
+      track.style.transform = `translateX(${LEFT_INSET - sel.offsetLeft}px)`;
+    }
+    const ae = document.activeElement as HTMLElement | null;
+    if (!player && ae && ae.classList.contains('wp-tile') && ae !== sel) sel.focus();
+  }, [pos, collections, player]);
+
+  // After a slide that ran past the center copy, recenter pos into [0,n) with no
+  // animation (the copies are identical, so it's invisible) — seamless loop.
+  const onTrackTransitionEnd = useCallback(() => {
+    if (n && (pos < 0 || pos >= n)) {
+      skipAnim.current = true;
+      setPos(realIndex);
+    }
+  }, [pos, n, realIndex]);
+
+  // left/right slide the strip by one (continuous; recenter keeps it looping)
+  const rotate = useCallback((delta: number) => setPos((p) => p + delta), []);
+  // left/right rotate the strip instead of moving focus; stopPropagation keeps
+  // the global nav from also acting (e.g. left-edge opening the sidebar).
+  // Inert while the slideshow player is open — the background tile keeps DOM
+  // focus, so without this its keydown would swallow the player's own left/right
+  // (advancing the show) and rotate the hidden carousel instead.
+  const onTileKey = useCallback(
+    (e: KeyboardEvent) => {
+      if (player) return;
+      if (e.keyCode === Key.Left) {
+        e.preventDefault();
+        e.stopPropagation();
+        rotate(-1);
+      } else if (e.keyCode === Key.Right) {
+        e.preventDefault();
+        e.stopPropagation();
+        rotate(1);
+      }
+    },
+    [rotate, player],
+  );
+
   // Pull the next bucket(s) until one yields assets matching the filter. Returns
   // that batch (empty when the collection is exhausted).
   const pullBatch = async (token: number): Promise<Asset[]> => {
     const f = feed.current;
     if (!f) return [];
     while (f.idx < f.buckets.length) {
-      const cols = await getBucket(f.buckets[f.idx++].timeBucket).catch(() => null);
+      const cols = await f.fetchBucket(f.buckets[f.idx++].timeBucket).catch(() => null);
       if (prepToken.current !== token) return [];
       const add = cols ? flattenBucket(cols).filter(f.filter) : [];
       if (add.length) return add;
@@ -131,6 +273,8 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
         const j = Math.floor(Math.random() * (k + 1));
         [rest[k], rest[j]] = [rest[j], rest[k]];
       }
+    } else if (f.order === 'asc') {
+      rest.sort((a, b) => (a.timeBucket < b.timeBucket ? -1 : 1)); // oldest first
     } else {
       rest.sort((a, b) => (a.timeBucket < b.timeBucket ? 1 : -1)); // newest first
     }
@@ -142,9 +286,19 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
     setEmptySource(null);
     setPlayerMode(c.id === 'videos' ? 'videos' : 'photos');
     setPreparing(c);
-    const buckets = await getTimelineBuckets().catch(() => [] as TimeBucket[]);
+    // Album source: stream that album's buckets in `order` (asc default).
+    // Timeline source: the whole library, newest first (as before).
+    const order: Order = c.order ?? 'desc';
+    const buckets = await (c.albumId
+      ? getAlbumBuckets(c.albumId, order)
+      : getTimelineBuckets(order)
+    ).catch(() => [] as TimeBucket[]);
     if (prepToken.current !== token) return; // cancelled via Back
-    feed.current = { buckets, idx: 0, filter: c.filter, loading: false };
+    const albumId = c.albumId;
+    const fetchBucket = albumId
+      ? (tb: string) => getAlbumBucket(albumId, tb, order)
+      : (tb: string) => getBucket(tb, order);
+    feed.current = { buckets, idx: 0, filter: c.filter, loading: false, order, fetchBucket };
     const first = await pullBatch(token); // just the first non-empty bucket
     if (prepToken.current !== token) return;
     setPreparing(null);
@@ -158,14 +312,23 @@ export function Wallpaper({ backRef, onFullscreen }: Props) {
       <div class="wp-shelf">
         <h2 class="wp-shelf-title">Choose a source</h2>
         <div class="wp-tiles">
-          {COLLECTIONS.map((c) => (
-            <CollectionTile
-              key={c.id}
-              collection={c}
-              onFocus={() => setFocused(c)}
-              onOpen={() => openCollection(c)}
-            />
-          ))}
+          <div class="wp-track" ref={trackRef} onTransitionEnd={onTrackTransitionEnd}>
+          {Array.from({ length: n * 3 }, (_, r) => {
+            // Three copies so there's always a tile on both sides (seamless
+            // loop). The selected one is at the center-copy slot n + pos.
+            const c = collections[r % n];
+            const isSel = r === n + pos;
+            return (
+              <CollectionTile
+                key={r}
+                collection={c}
+                selected={isSel}
+                onKeyDown={isSel ? onTileKey : undefined}
+                onOpen={() => openCollection(c)}
+              />
+            );
+          })}
+          </div>
         </div>
       </div>
 
@@ -232,13 +395,29 @@ function heroState(id: string): HeroState {
   return s;
 }
 
-// Random candidate pool per collection via a single type-filtered metadata
-// search (fast even for sparse types like Videos), fetched once and cached.
+// A few of an album's images (oldest-first), for the hero/cover sample only —
+// stops after enough buckets to fill the hero, so a large album isn't fully
+// walked just to preview it.
+async function albumImages(albumId: string): Promise<Asset[]> {
+  const buckets = await getAlbumBuckets(albumId, 'asc').catch(() => [] as TimeBucket[]);
+  const out: Asset[] = [];
+  for (const b of buckets) {
+    const cols = await getAlbumBucket(albumId, b.timeBucket, 'asc').catch(() => null);
+    if (cols) out.push(...flattenBucket(cols).filter((a) => a.isImage));
+    if (out.length >= HERO_MAX * 3) break;
+  }
+  return out;
+}
+
+// Random candidate pool per collection. Timeline sources use a single
+// type-filtered metadata search (fast even for sparse types); album sources
+// sample the album's own images. Fetched once and cached per collection id.
 const poolCache = new Map<string, Promise<Asset[]>>();
 function collectionPool(c: Collection): Promise<Asset[]> {
   let p = poolCache.get(c.id);
   if (!p) {
-    p = searchByType(c.type)
+    const source = c.albumId ? albumImages(c.albumId) : searchByType(c.type);
+    p = source
       // skip assets with no generated thumbnail — they 404 on the preview endpoint
       .then((list) => pickRandom(list.filter((a) => a.thumbhash), list.length))
       .catch(() => []);
@@ -378,47 +557,53 @@ function Hero({ collection }: { collection: Collection }) {
 // ---- Collection tile with a lazily-loaded cover thumbnail ----
 function CollectionTile({
   collection,
-  onFocus,
+  selected,
+  onKeyDown,
   onOpen,
 }: {
   collection: Collection;
-  onFocus: () => void;
+  // the selected (left-slot) tile is the single focusable one and owns the
+  // rotate keys; the rest are pointer-only.
+  selected: boolean;
+  onKeyDown?: (e: KeyboardEvent) => void;
   onOpen: () => void;
 }) {
   const [cover, setCover] = useState<string | null>(null);
   useEffect(() => {
+    // Only albums show a real cover (their own thumbnail). Photos/Videos use a
+    // generic tile, so there's no per-tile library fetch for them.
+    if (!collection.coverId) {
+      setCover(null);
+      return;
+    }
     let alive = true;
-    collectionPool(collection).then(async (list) => {
-      // pool is already shuffled — use the first thumbnail that actually loads
-      for (const a of list) {
-        if (!alive) return;
-        try {
-          const u = await loadThumb(a.id);
-          if (!alive) return;
-          setCover(u);
-          return;
-        } catch {
-          // try the next candidate
-        }
-      }
-    });
-    return () => {
-      alive = false;
-    };
-  }, [collection.id, collection.filter]);
+    loadThumb(collection.coverId)
+      .then((u) => { if (alive) setCover(u); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [collection.coverId]);
 
   return (
     <button
-      data-focusable
-      class="wp-tile focusable"
-      onFocus={onFocus}
+      data-focusable={selected || undefined}
+      class={'wp-tile' + (selected ? ' focusable selected' : '')}
+      onKeyDown={onKeyDown}
       onClick={onOpen}
     >
-      {cover ? <img class="wp-tile-img" src={cover} /> : <div class="thumb-ph" />}
+      {cover ? (
+        <img class="wp-tile-img" src={cover} />
+      ) : (
+        <div class="wp-tile-generic">
+          <Icon name={collection.icon} size={64} />
+        </div>
+      )}
       <span class="wp-tile-grad" />
-      <span class="wp-tile-label">
+      {/* all tiles: icon top-left, title bottom-left */}
+      <span class="wp-tile-icon">
         <Icon name={collection.icon} size={22} />
-        {collection.label}
+      </span>
+      <span class="wp-tile-label">
+        <span class="wp-tile-label-text">{collection.label}</span>
       </span>
     </button>
   );
