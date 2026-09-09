@@ -1,6 +1,6 @@
 {
   "id": "com.immich.webos",
-  "version": "0.11.2",
+  "version": "0.12.0",
   "vendor": "self",
   "type": "web",
   "main": "index.html",
