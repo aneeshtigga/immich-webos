@@ -27,6 +27,7 @@ import { Albums, AlbumsRestore } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
 import { Wallpaper, resetWallpaperCaches } from './Wallpaper';
+import { AccountSwitcher } from './AccountSwitcher';
 import { useRemote } from '../nav/useRemote';
 import { setRoot, focusables, focus, elementInViewport, focusVisibleContent } from '../nav/focus';
 import { exitApp } from '../nav/exit';
@@ -46,6 +47,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const [album, setAlbum] = useState<Album | null>(null);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showAccounts, setShowAccounts] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   // true while the wallpaper slideshow overlay owns the keys (like `viewer`)
   const [wpFullscreen, setWpFullscreen] = useState(false);
@@ -313,6 +315,11 @@ export function Home({ onLogout }: { onLogout: () => void }) {
     onLogout();
   };
 
+  const handleAccountChanged = () => {
+    setShowAccounts(false);
+    window.location.reload();
+  };
+
   return (
     <div class="home" ref={rootRef}>
       {/* Viewer is an overlay (position:fixed), NOT a replacement for the grid.
@@ -326,6 +333,16 @@ export function Home({ onLogout }: { onLogout: () => void }) {
           onNearEnd={handleNearEnd}
         />
       )}
+
+      {showAccounts && (
+        <div class="account-switcher-backdrop">
+          <AccountSwitcher
+            onClose={() => setShowAccounts(false)}
+            onProfileChanged={handleAccountChanged}
+          />
+        </div>
+      )}
+
       {toast && <div class="toast">{toast}</div>}
       <Sidebar
         open={sidebarOpen}
@@ -333,6 +350,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         userName={user?.name}
         onNavigate={navigate}
         onLogout={requestLogout}
+        onSwitchAccount={() => setShowAccounts(true)}
       />
       {confirmLogout && (
         <ConfirmDialog
