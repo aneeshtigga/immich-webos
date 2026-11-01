@@ -46,6 +46,11 @@ export function getActiveProfileId(): string | null {
   return localStorage.getItem(ACTIVE_PROFILE_KEY);
 }
 
+export function getActiveProfile(): StoredProfile | null {
+  const id = getActiveProfileId();
+  return id ? getProfile(id) : null;
+}
+
 export function clearActiveProfile(): void {
   localStorage.removeItem(ACTIVE_PROFILE_KEY);
 }
@@ -125,11 +130,4 @@ export function saveProfileForLogin(
   localStorage.setItem(ACTIVE_PROFILE_KEY, nextProfile.id);
 
   return nextProfile;
-}
-
-export function activateProfile(id: string): StoredProfile | null {
-  const profile = getProfile(id);
-  if (!profile) return null;
-  setActiveProfile(id);
-  return profile;
 }
