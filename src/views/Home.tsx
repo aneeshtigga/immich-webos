@@ -27,7 +27,8 @@ import { Albums, AlbumsRestore } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
 import { Wallpaper, resetWallpaperCaches } from './Wallpaper';
-import { AccountSwitcher } from './AccountSwitcher';
+import { AccountPill } from './AccountPill';
+import { getActiveProfileId, removeProfile } from '../auth/profiles';
 import { useRemote } from '../nav/useRemote';
 import { setRoot, focusables, focus, elementInViewport, focusVisibleContent } from '../nav/focus';
 import { exitApp } from '../nav/exit';
@@ -47,7 +48,14 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const [album, setAlbum] = useState<Album | null>(null);
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showAccounts, setShowAccounts] = useState(false);
+  // sidebar user row the account pill pops out from (null = closed); `hover`
+  // = opened by the pointer, so it doesn't take the remote
+  const [accountsAnchor, setAccountsAnchor] = useState<HTMLElement | null>(null);
+  const [accountsHover, setAccountsHover] = useState(false);
+  const hoverCloseTimer = useRef(0);
+  // set by an explicit close so the pointer still resting on the row doesn't
+  // instantly re-open it; cleared once the pointer leaves the row
+  const hoverSuppressed = useRef(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
   // true while the wallpaper slideshow overlay owns the keys (like `viewer`)
   const [wpFullscreen, setWpFullscreen] = useState(false);
@@ -283,7 +291,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
 
   // disable the grid/sidebar remote handler while an overlay that owns the keys
   // is up — the fullscreen viewer, the logout dialog, or the wallpaper slideshow
-  useRemote({ onBack, onEdge, enabled: !viewer && !confirmLogout && !wpFullscreen });
+  useRemote({ onBack, onEdge, enabled: !viewer && !confirmLogout && !(accountsAnchor && !accountsHover) && !wpFullscreen });
 
   const navigate = (r: Route) => {
     albumsRestore.current = null;
@@ -310,13 +318,57 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   const doLogout = async () => {
     setConfirmLogout(false);
     await logout();
+    // the server just revoked this token, so its saved profile is dead too
+    const activeId = getActiveProfileId();
+    if (activeId) removeProfile(activeId);
     clearSession();
     resetWallpaperCaches(); // drop the previous account's hero/pool caches
     onLogout();
   };
 
+  // Back to Login WITHOUT the server logout, so the current profile's token
+  // stays valid for switching back later.
+  const addAccount = () => {
+    setAccountsAnchor(null);
+    clearSession();
+    resetWallpaperCaches();
+    onLogout();
+  };
+
+  const closeAccounts = () => {
+    const trigger = accountsAnchor;
+    hoverSuppressed.current = true;
+    setAccountsAnchor(null);
+    if (!accountsHover) setTimeout(() => trigger?.focus(), 0);
+  };
+
+  const openAccounts = (trigger: HTMLElement) => {
+    clearTimeout(hoverCloseTimer.current);
+    setAccountsHover(false);
+    setAccountsAnchor(trigger);
+  };
+
+  // Pointer hover: open without taking the remote; leaving the row or the pill
+  // closes after a beat, so crossing the gap between them doesn't drop it.
+  const hoverAccounts = (trigger: HTMLElement) => {
+    clearTimeout(hoverCloseTimer.current);
+    if (accountsAnchor || hoverSuppressed.current) return; // already open, or just closed
+    setAccountsHover(true);
+    setAccountsAnchor(trigger);
+  };
+  const keepAccounts = () => clearTimeout(hoverCloseTimer.current);
+  const leaveAccounts = () => {
+    hoverSuppressed.current = false;
+    if (!accountsHover) return;
+    clearTimeout(hoverCloseTimer.current);
+    hoverCloseTimer.current = window.setTimeout(() => setAccountsAnchor(null), 300);
+  };
+
   const handleAccountChanged = () => {
-    setShowAccounts(false);
+    // the user already chose; don't show the launch picker on this reload
+    try {
+      sessionStorage.setItem('immich.skipPicker', '1');
+    } catch {}
     window.location.reload();
   };
 
@@ -334,13 +386,16 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         />
       )}
 
-      {showAccounts && (
-        <div class="account-switcher-backdrop">
-          <AccountSwitcher
-            onClose={() => setShowAccounts(false)}
-            onProfileChanged={handleAccountChanged}
-          />
-        </div>
+      {accountsAnchor && (
+        <AccountPill
+          anchor={accountsAnchor}
+          hover={accountsHover}
+          onPointerEnter={keepAccounts}
+          onPointerLeave={leaveAccounts}
+          onClose={closeAccounts}
+          onProfileChanged={handleAccountChanged}
+          onAddAccount={addAccount}
+        />
       )}
 
       {toast && <div class="toast">{toast}</div>}
@@ -348,9 +403,12 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         open={sidebarOpen}
         active={route}
         userName={user?.name}
+        userId={user?.userId}
         onNavigate={navigate}
         onLogout={requestLogout}
-        onSwitchAccount={() => setShowAccounts(true)}
+        onSwitchAccount={openAccounts}
+        onAccountsHover={hoverAccounts}
+        onAccountsLeave={leaveAccounts}
       />
       {confirmLogout && (
         <ConfirmDialog

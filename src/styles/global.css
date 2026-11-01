@@ -695,6 +695,28 @@ select {
 .rail-item.user {
   color: var(--muted);
 }
+/* Letter avatar in the user row, a size up from the 26px nav icons. 20px left
+   padding re-centres it in the 76px collapsed strip ((76-34)/2 = 21) and the
+   tighter label gap keeps the name aligned with the labels above. */
+.rail-item.user {
+  padding-left: 20px;
+}
+.rail-item.user > * + * {
+  margin-left: 14px;
+}
+.user-initial {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1;
+  color: #fff;
+}
 .rail-item--error {
   color: #ff6b6b;
 }
@@ -2110,4 +2132,237 @@ select {
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
   font-size: 16px;
+}
+
+/* ---------- Account pill (sidebar user row) ---------- */
+/* Transparent full-screen catcher so a pointer click outside closes it; the
+   pill itself sits beside the open rail, vertically centred on the user row. */
+.pill-scrim {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 60;
+}
+.account-pill {
+  position: fixed;
+  z-index: 60;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
+}
+.account-pill-row {
+  display: flex;
+}
+/* margins, not flex `gap` (Cr84+; webOS 6 is Cr79) */
+.account-pill-row > * + * {
+  margin-left: 8px;
+}
+.pill-item {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: none;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pill-item .user-initial {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+}
+.pill-item.focusable:focus,
+.pill-item:hover {
+  transform: scale(1.1);
+}
+.pill-add {
+  color: var(--muted);
+}
+/* dashed ring like the launch picker's "Add account" tile, sized to match the
+   letter circles beside it */
+.pill-add-ring {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px dashed var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Launch account picker ---------- */
+/* Full-screen "who's watching" row (YouTube TV style). vmin sizes and the
+   same artwork as Login; spacing uses margins, not flex `gap` (Cr84+; webOS 6
+   is Cr79). */
+.picker {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: var(--bg) url('../assets/login-bg.webp') center / cover no-repeat;
+}
+/* Scrim like Login's, but radial: content is centred, so darkest behind the
+   title and tiles, letting the artwork show toward the edges. */
+.picker::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(10, 10, 10, 0.9) 0%,
+    rgba(10, 10, 10, 0.75) 45%,
+    rgba(10, 10, 10, 0.45) 100%
+  );
+  pointer-events: none;
+}
+.picker > * {
+  position: relative;
+  z-index: 1;
+}
+.picker > * + * {
+  margin-top: 6vmin;
+}
+.picker-title {
+  margin: 0;
+  font-size: 5vmin;
+  font-weight: 500;
+  color: var(--fg);
+}
+/* each tile carries half the 4vmin spacing on every side, so wrapped rows are
+   spaced too */
+.picker-row {
+  display: flex;
+  max-width: 92vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.picker-tile {
+  width: 26vmin;
+  padding: 3vmin 2vmin;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 2vmin;
+  color: var(--fg);
+  background: transparent;
+  border: none;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 20px;
+}
+/* clears the focus ring, which reaches 1.4vmin below the avatar */
+.picker-tile > * + * {
+  margin-top: 2.4vmin;
+}
+/* Focus rings the avatar circle only, not the whole tile: drop the global
+   square ring (.focusable:focus) and draw a circle around the avatar with a
+   see-through gap (a box-shadow gap would need a solid fill over the art).
+   Geometry: 16vmin avatar + 0.8vmin gap + 0.6vmin ring each side = 18.8vmin,
+   starting 1.4vmin above the avatar's top (tile padding-top 3vmin). */
+.picker-tile {
+  position: relative;
+}
+.picker-tile::before {
+  content: '';
+  position: absolute;
+  top: 1.6vmin;
+  left: 50%;
+  width: 18.8vmin;
+  height: 18.8vmin;
+  margin-left: -9.4vmin;
+  box-sizing: border-box; /* the global `*` rule doesn't reach pseudo-elements */
+  border: 0.6vmin solid transparent;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.picker-tile.focusable:focus {
+  box-shadow: none;
+  transform: scale(1.06);
+}
+.picker-tile.focusable:focus::before {
+  border-color: var(--focus);
+}
+.picker-tile.busy {
+  opacity: 0.6;
+}
+.picker-avatar {
+  position: relative;
+  width: 16vmin;
+  height: 16vmin;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7vmin;
+  font-weight: 500;
+  color: #fff;
+  background: var(--surface-2);
+}
+.picker-avatar img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.picker-add .picker-avatar {
+  color: var(--muted);
+  border: 2px dashed var(--muted);
+}
+.picker-name {
+  font-size: 2.8vmin;
+  font-weight: 400;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* focused account's full server URL, centred under the row */
+.picker-server {
+  margin-top: 3vmin; /* tighter than the title gap: it belongs to the row */
+  display: flex;
+  align-items: center;
+  max-width: 92vw;
+  padding: 1.1vmin 2.6vmin 1.1vmin 2vmin;
+  border-radius: 3vmin;
+  background: rgba(24, 24, 27, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 2.2vmin;
+  color: var(--fg);
+  word-break: break-all;
+}
+.picker-server.empty {
+  visibility: hidden;
+}
+.picker-server svg {
+  flex: none;
+  width: 2.6vmin;
+  height: 2.6vmin;
+  color: var(--muted);
+}
+/* margin, not flex `gap` (Cr84+; webOS 6 is Cr79) */
+.picker-server > * + * {
+  margin-left: 1.2vmin;
+}
+.picker-server-label {
+  color: var(--muted);
 }
