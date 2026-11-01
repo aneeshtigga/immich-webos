@@ -192,7 +192,9 @@ const server = createServer(async (req, res) => {
     try {
       const r = await fetch(base + '/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Immich names the session from this UA (Authorized devices); Node's
+        // default "node" shows as a blank device. Parses as "smarttv / webOS".
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Immich-webOS (Web0S; Linux/SmartTV)' },
         body: JSON.stringify({ email, password }),
       });
       if (r.status === 401) return send(res, 401, { error: 'invalid_credentials' });
