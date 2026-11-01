@@ -35,6 +35,10 @@ var APP_ID = 'com.immich.webos';
 var appinfo = {};
 try { appinfo = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'appinfo.json'), 'utf8')); } catch (e) {}
 var CURRENT_VERSION = appinfo.version || '0.0.0';
+// Immich labels a session (Account settings > Authorized devices) by parsing
+// the login request's User-Agent. Node sends none, which shows as a blank
+// device; this parses as "smarttv / webOS".
+var LOGIN_UA = 'Immich-webOS/' + CURRENT_VERSION + ' (Web0S; Linux/SmartTV)';
 
 var service = new Service('com.immich.webos.service');
 
@@ -107,7 +111,7 @@ function postJson(target, bodyObj, cb) {
     port: u.port || (isHttps ? 443 : 80),
     path: u.path,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': data.length },
+    headers: { 'Content-Type': 'application/json', 'Content-Length': data.length, 'User-Agent': LOGIN_UA },
   };
   if (isHttps) opts.rejectUnauthorized = false;
   var req = lib.request(opts, function (res) {
