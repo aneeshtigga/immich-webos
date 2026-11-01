@@ -45,15 +45,19 @@
 
 
 :root {
-  --immich-primary: #4250af;
-  --immich-dark-primary: #accbfa; /* accent on dark bg */
+  /* UI accent for focus rings, selected state, active icons, fills: Google's
+     dark-theme off-white (#e8eaed), not pure #fff, which glares on a TV.
+     -rgb for translucent tints (rgba(var(--accent-rgb), a); no color-mix on
+     webOS Cr68/79). */
+  --accent: #e8eaed;
+  --accent-rgb: 232, 234, 237;
   --bg: #0a0a0a;
   --fg: #e5e7eb;
   --gray: #212121;
   --surface: #18181b;
   --surface-2: #232329;
   --muted: #8a8a92;
-  --focus: var(--immich-dark-primary);
+  --focus: var(--accent);
 }
 
 * {
@@ -128,7 +132,7 @@ select {
 }
 .empty-state-title {
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 500;
   color: #e5e7eb;
 }
 .empty-state-hint {
@@ -312,7 +316,7 @@ select {
 }
 .login-heading {
   font-size: 4.4vmin;
-  font-weight: 700;
+  font-weight: 500;
   margin: 0 0 1.4vmin;
   color: var(--fg);
 }
@@ -348,7 +352,7 @@ select {
 }
 .login-qr-title {
   font-size: 3.4vmin;
-  font-weight: 600;
+  font-weight: 400;
   margin: 0 0 3vmin;
   color: var(--fg);
 }
@@ -371,7 +375,7 @@ select {
   display: inline-block;
   margin-top: 0.8vmin;
   font-size: 3.4vmin;
-  font-weight: 700; /* the URL is the emphasized part */
+  font-weight: 500; /* the URL is the emphasized part */
 }
 .login-qr-enter {
   font-size: 2.6vmin;
@@ -382,7 +386,7 @@ select {
   margin: 0;
   font-family: 'Inter';
   font-size: 5vmin;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.7vmin;
   color: var(--fg);
 }
@@ -455,7 +459,7 @@ select {
   color: var(--muted);
   font-family: 'Inter';
   font-size: 1.8vmin;
-  font-weight: 600;
+  font-weight: 400;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -464,15 +468,15 @@ select {
   height: 2.1vmin;
 }
 .mode-toggle-btn--on {
-  background: rgba(var(--immich-primary-rgb, 66, 80, 175), 0.35);
-  color: var(--immich-dark-primary);
+  background: rgba(var(--accent-rgb), 0.18);
+  color: var(--accent);
 }
 .scheme-btn--on {
-  border-color: var(--immich-dark-primary);
-  background: rgba(var(--immich-primary-rgb, 66, 80, 175), 0.25);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 .input:focus {
-  border-color: var(--immich-dark-primary);
+  border-color: var(--accent);
   background: rgba(10, 10, 10, 0.75);
 }
 /* Chrome autofill forces its own tiny light styling; restore ours. Dev-only —
@@ -640,13 +644,9 @@ select {
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
-  transition: transform 0.08s ease;
 }
 .rail-item > * + * {
   margin-left: 18px;
-}
-.rail-item:active {
-  transform: scale(0.95);
 }
 /* icon + label ride above the indicator */
 .rail-item > * {
@@ -676,7 +676,7 @@ select {
   right: 14px;
 }
 .rail-item.active::before {
-  background: rgba(66, 80, 175, 0.3); /* immich primary @ 30% (no color-mix: webOS Cr68) */
+  background: rgba(var(--accent-rgb), 0.14); /* accent at 30% (the old blue's) would glare */
 }
 /* Focus ring hugs the squircle, not the full button. Override the global square
    ring (.focusable:focus) which would otherwise box the whole 300px row. */
@@ -690,7 +690,7 @@ select {
   color: var(--fg);
 }
 .rail-item.active svg {
-  color: var(--immich-dark-primary);
+  color: var(--accent);
 }
 .rail-item.user {
   color: var(--muted);
@@ -819,7 +819,7 @@ select {
 }
 .bucket-title {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 400;
   margin: 22px 0 10px;
   color: var(--fg);
 }
@@ -840,7 +840,7 @@ select {
   top: 50%;
   transform: translateY(-50%);
   font-size: 19px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--fg);
   white-space: nowrap;
 }
@@ -876,7 +876,7 @@ select {
    over a thumbnail. :not(:focus) so hovering never overrides the full focus
    ring on the actually-focused (last-opened) thumbnail — focus stays put. */
 .thumb:hover:not(:focus) {
-  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.4);
   z-index: 2;
 }
 .thumb-ph {
@@ -940,7 +940,7 @@ select {
 /* Pointer hover: same lighter ring as grid thumbnails. :not(:focus) so it never
    overrides the full focus ring on the focused card. */
 .album-card:hover:not(:focus) {
-  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.4);
 }
 .album-cover {
   position: relative;
@@ -967,7 +967,7 @@ select {
 }
 .album-name {
   font-size: 21px;
-  font-weight: 600;
+  font-weight: 400;
 }
 .album-count {
   font-size: 17px;
@@ -1006,7 +1006,7 @@ select {
 .album-title {
   margin: 0;
   font-size: 30px;
-  font-weight: 700;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1043,8 +1043,8 @@ select {
   margin-left: 12px;
 }
 .searchbar:focus-within {
-  border-color: var(--immich-dark-primary);
-  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
 }
 .searchbar-icon {
   color: var(--muted);
@@ -1083,7 +1083,7 @@ select {
 .searchbar-clear:focus {
   outline: none;
   box-shadow: 0 0 0 3px var(--focus);
-  background: rgba(172, 203, 250, 0.2);
+  background: rgba(var(--accent-rgb), 0.2);
 }
 .search-view .grid-scroll {
   flex: 1;
@@ -1123,7 +1123,7 @@ select {
 }
 .browse-title {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 400;
   margin: 0 0 14px;
   color: var(--fg);
 }
@@ -1179,7 +1179,7 @@ select {
 }
 /* Pointer hover: same lighter ring as grid thumbnails, on the round face. */
 .person-chip:hover:not(:focus) .person-face {
-  box-shadow: 0 0 0 4px rgba(172, 203, 250, 0.4);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.4);
 }
 
 /* Places: card grid with a city label overlaid on a cover photo */
@@ -1197,7 +1197,7 @@ select {
 }
 /* Pointer hover: same lighter ring as grid thumbnails. */
 .place-card:hover:not(:focus) {
-  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.4);
 }
 .place-cover {
   position: relative;
@@ -1226,7 +1226,7 @@ select {
   left: 0;
   padding: 24px 14px 12px;
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--fg);
   background: linear-gradient(to top, rgba(0, 0, 0, 0.75), transparent);
 }
@@ -1255,7 +1255,7 @@ select {
 }
 .result-title {
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--fg);
 }
 
@@ -1369,7 +1369,7 @@ select {
   height: 56px;
   margin: -28px 0 0 -28px;
   border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top-color: var(--immich-dark-primary);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: fs-spin 0.8s linear infinite;
   pointer-events: none;
@@ -1418,7 +1418,7 @@ select {
 }
 .fs-location {
   font-size: 17px;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--fg);
   opacity: 0.9;
   white-space: nowrap;
@@ -1448,12 +1448,12 @@ select {
 .fs-btn:hover,
 .fs-btn:focus {
   outline: none;
-  border-color: var(--immich-dark-primary);
+  border-color: var(--accent);
   background: rgba(60, 60, 70, 0.9);
 }
 /* Live button while its motion clip is playing. */
 .fs-btn.active {
-  color: var(--immich-dark-primary);
+  color: var(--accent);
 }
 
 /* side prev/next arrows */
@@ -1481,7 +1481,7 @@ select {
 .fs-arrow:hover,
 .fs-arrow:focus {
   outline: none;
-  border-color: var(--immich-dark-primary);
+  border-color: var(--accent);
   background: rgba(40, 40, 48, 0.85);
 }
 
@@ -1523,7 +1523,7 @@ select {
   left: 0;
   top: 14px;
   bottom: 14px;
-  background: var(--immich-dark-primary);
+  background: var(--accent);
   border-radius: 3px;
   pointer-events: none; /* clicks land on the track, not the fill */
 }
@@ -1600,7 +1600,7 @@ select {
 }
 .confirm-title {
   font-size: 3.6vmin;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--fg);
   margin: 0 0 1.4vmin;
 }
@@ -1619,7 +1619,7 @@ select {
   width: 100%;
   padding: 1.6vmin 2vmin;
   font-size: 2.4vmin;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--fg);
   background: var(--surface-2);
   border: none;
@@ -1631,7 +1631,7 @@ select {
   background: #b3261e;
   color: #fff;
 }
-/* Focus ring on the destructive action reads in a darker red, not the blue
+/* Focus ring on the destructive action reads in a darker red, not the white
    accent, so it stays in the button's own colour family. */
 .confirm-btn--danger.focusable:focus {
   box-shadow: 0 0 0 8px #7a171268;
@@ -1662,7 +1662,7 @@ select {
 }
 .errbox-title {
   font-size: 34px;
-  font-weight: 700;
+  font-weight: 500;
   margin: 0 0 16px;
   color: var(--fg);
 }
@@ -1767,14 +1767,14 @@ select {
   align-items: center;
   gap: 8px;
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--immich-dark-primary);
+  color: var(--accent);
 }
 .wp-hero-title {
   font-size: 52px;
-  font-weight: 800;
+  font-weight: 500;
   margin: 10px 0 6px;
   color: #fff;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
@@ -1791,7 +1791,7 @@ select {
 }
 .wp-shelf-title {
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 400;
   margin: 0 0 14px;
   color: var(--fg);
 }
@@ -1858,7 +1858,7 @@ select {
 }
 /* pointer hover feedback without stealing the focus ring */
 .wp-tile:hover:not(:focus) {
-  box-shadow: 0 0 0 3px rgba(172, 203, 250, 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.4);
 }
 .wp-tile-grad {
   position: absolute;
@@ -1875,7 +1875,7 @@ select {
   justify-content: flex-start;
   gap: 8px;
   font-size: 19px;
-  font-weight: 600;
+  font-weight: 400;
   color: #fff;
   /* buttons default to text-align:center, which centers wrapped multi-line
      titles — force left. */
@@ -1900,7 +1900,7 @@ select {
 }
 .wp-prep-text {
   font-size: 20px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--fg);
 }
 
@@ -1975,7 +1975,7 @@ select {
 }
 .wp-player-loc {
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 500; /* medium: reads over busy photos, the date below stays regular */
   color: #fff;
 }
 .wp-player-date {
@@ -2056,7 +2056,7 @@ select {
 }
 .wp-icon-btn.active {
   color: #0a0a0a;
-  background: var(--immich-dark-primary);
+  background: var(--accent);
 }
 /* speed selector, top-right */
 .wp-speed {
@@ -2071,7 +2071,7 @@ select {
   background: transparent;
   color: rgba(255, 255, 255, 0.85);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 400;
   padding: 8px 16px;
   border-radius: 999px;
   cursor: pointer;
@@ -2082,13 +2082,13 @@ select {
 }
 .wp-speed-btn.active {
   color: #0a0a0a;
-  background: var(--immich-dark-primary);
+  background: var(--accent);
 }
 /* d-pad focus ring on the option bar (Up raises + focuses the bar) */
 .wp-player-top .wp-icon-btn:focus,
 .wp-player-top .wp-speed-btn:focus {
   outline: none;
-  box-shadow: 0 0 0 3px var(--immich-dark-primary);
+  box-shadow: 0 0 0 3px var(--accent);
 }
 .wp-player-pill {
   display: inline-flex;
@@ -2099,7 +2099,7 @@ select {
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 400;
 }
 .wp-player-count {
   position: absolute;
