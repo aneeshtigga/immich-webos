@@ -153,7 +153,7 @@ select {
   align-items: center;
   justify-content: center;
   opacity: 1;
-  transition: opacity 0.45s ease;
+  transition: opacity 0.35s ease;
 }
 .splash.leaving {
   opacity: 0;
@@ -173,7 +173,7 @@ select {
   width: 100%;
   height: 100%;
   opacity: 0;
-  animation: orb-fade 0.6s ease-out forwards;
+  animation: orb-fade 0.4s ease-out forwards;
 }
 @keyframes orb-fade {
   to { opacity: 1; }
@@ -196,7 +196,7 @@ select {
   background-size: 220% 100%;
   mix-blend-mode: screen;
   opacity: 0;
-  animation: sheen-sweep 2.8s ease-out 0.5s forwards;
+  animation: sheen-sweep 1.2s ease-out 0.2s forwards;
 }
 @keyframes sheen-sweep {
   0%   { opacity: 0; background-position: 200% 0; }
