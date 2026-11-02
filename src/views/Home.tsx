@@ -381,6 +381,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
         <Fullscreen
           assets={viewer.assets}
           index={viewer.index}
+          overlayHidden={overlayHidden}
+          onToggleOverlay={toggleOverlay}
           onClose={closeViewer}
           onNearEnd={handleNearEnd}
         />

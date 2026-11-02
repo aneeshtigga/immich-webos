@@ -9,12 +9,13 @@ import {
   setLivePlay,
   getVideoQuality,
   setVideoQuality,
-  getOverlayHidden,
 } from '../settings';
 
 interface Props {
   assets: Asset[];
   index: number;
+  overlayHidden: boolean;
+  onToggleOverlay: () => void;
   // reports the index being viewed at close time so the grid can restore focus
   // to that exact photo (the user may have paged left/right while in here).
   onClose: (index: number) => void;
@@ -54,7 +55,7 @@ function clampPan(x: number, y: number, z: number): { x: number; y: number } {
 //
 // On-screen buttons are clickable with the LG magic-remote pointer; the d-pad
 // keeps fixed media semantics rather than moving focus between buttons.
-export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
+export function Fullscreen({ assets, index, overlayHidden, onToggleOverlay, onClose, onNearEnd }: Props) {
   const [i, setI] = useState(index);
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [imgReady, setImgReady] = useState(false);
@@ -64,11 +65,14 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   const [progress, setProgress] = useState({ cur: 0, dur: 0, buffered: 0 });
   // remembered across assets and restarts (see settings.getVideoQuality)
   const [quality, setQuality] = useState<Quality>(getVideoQuality);
-  // When the user has toggled "hide overlay" in the grid header, the viewer
-  // opens with its chrome hidden and never auto-shows it (poke below no-ops the
-  // show). Read once at open; nav/back still work via the remote regardless.
-  const overlayHidden = useRef(getOverlayHidden()).current;
+  // Keep the viewer chrome in sync with the persisted "hide overlay" setting.
+  // When the setting is enabled, the overlay stays hidden until the user
+  // explicitly re-shows it from the viewer or the header toggle.
   const [overlay, setOverlay] = useState(!overlayHidden);
+  useEffect(() => {
+    setOverlay(!overlayHidden);
+    if (overlayHidden) window.clearTimeout(hideTimer.current);
+  }, [overlayHidden]);
   const [videoErr, setVideoErr] = useState(false);
   const [buffering, setBuffering] = useState(false);
   // Live Photo: motionOn keeps the clip mounted; motionVisible drives its
@@ -533,6 +537,12 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
       onPointerUp={onImgUp}
       onPointerCancel={onImgUp}
     >
+      {overlayHidden && (
+        <button class="fs-overlay-toggle fs-btn" onClick={onToggleOverlay} title="Show player overlay">
+          <Icon name="eye" size={28} />
+          <span>Show overlay</span>
+        </button>
+      )}
       {/* media */}
       {isVideo ? (
         videoErr && quality === 'original' ? (
