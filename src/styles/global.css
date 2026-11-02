@@ -764,6 +764,100 @@ select {
   overflow: hidden;
 }
 
+/* ---------- Photo map ---------- */
+.map-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #10151b;
+  cursor: grab;
+}
+.map-view:active {
+  cursor: grabbing;
+}
+.map-tiles {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+}
+.map-tile {
+  position: absolute;
+  width: 256px;
+  height: 256px;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+}
+.map-bubble {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 56px;
+  height: 56px;
+  padding: 0 12px;
+  border: 3px solid rgba(255, 255, 255, 0.92);
+  border-radius: 30px;
+  background: rgba(53, 117, 184, 0.92);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.65);
+  cursor: pointer;
+  z-index: 1;
+}
+.map-bubble:hover,
+.map-bubble:focus {
+  outline: none;
+  background: #4a9be8;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.85), 0 2px 12px rgba(0, 0, 0, 0.65);
+}
+.map-guide,
+.map-attribution,
+.map-status {
+  position: absolute;
+  z-index: 2;
+  background: rgba(10, 10, 10, 0.88);
+  color: var(--fg);
+  border-radius: 12px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+.map-guide {
+  left: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px;
+  font-size: 16px;
+  line-height: 1.55;
+}
+.map-guide strong {
+  margin-bottom: 3px;
+  font-size: 18px;
+}
+.map-attribution {
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: #d0d2d5;
+}
+.map-status {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 18px 24px;
+  font-size: 20px;
+  text-align: center;
+  max-width: 70%;
+}
+.map-status.error {
+  color: #ff9a9a;
+}
+
 /* Floating per-view sort toggle. Sits top-right over the grid; circular like the
    album back button. Above the grid content, below the rail (6) and viewer (50)
    so it never covers the sidebar or fullscreen. */
