@@ -28,10 +28,27 @@ function makeObserver(rootMargin: string): Pool {
   const handler: IntersectionObserverCallback = (entries) => {
     for (const e of entries) {
       const cb = cbs.get(e.target);
-      if (cb) cb(e.isIntersecting);
+      // Older Chromium (e.g. webOS 4.4 / Chromium 53 on LG B8) lacks entry.isIntersecting
+      // (added in Chrome 58). Fallback to intersectionRatio / intersectionRect.
+      const isIntersecting =
+        typeof e.isIntersecting === 'boolean'
+          ? e.isIntersecting
+          : e.intersectionRatio > 0 ||
+            Boolean(
+              e.intersectionRect &&
+                (e.intersectionRect.width > 0 || e.intersectionRect.height > 0),
+            );
+      if (cb) cb(isIntersecting);
     }
   };
-  const build = () => new IntersectionObserver(handler, { root, rootMargin });
+  const build = () => {
+    try {
+      return new IntersectionObserver(handler, { root, rootMargin });
+    } catch {
+      // In case older Chromium rejects custom root with rootMargin:
+      return new IntersectionObserver(handler, { root: null, rootMargin });
+    }
+  };
 
   const pool: Pool = {
     observe(el, cb) {
@@ -76,8 +93,9 @@ export function setLazyRoot(root: Element | null): void {
 const PAGE = (typeof window !== 'undefined' && window.innerHeight) || 720;
 
 // ~2 pages: fetch a thumbnail well before it scrolls into view.
-export const thumbObserver = makeObserver(`${PAGE * 2}px`);
+// In older Chromium (Cr53), 4 explicit values with units avoid parser quirks.
+export const thumbObserver = makeObserver(`${PAGE * 2}px 0px ${PAGE * 2}px 0px`);
 // A bit further out than the thumbnails, so a bucket's assets have loaded by
 // the time its thumbnails enter the prefetch window (thumbs can't exist until
 // their bucket's asset list arrives).
-export const bucketObserver = makeObserver(`${PAGE * 2 + 300}px`);
+export const bucketObserver = makeObserver(`${PAGE * 2 + 300}px 0px ${PAGE * 2 + 300}px 0px`);
