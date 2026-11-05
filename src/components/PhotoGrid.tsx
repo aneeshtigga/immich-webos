@@ -72,13 +72,32 @@ export const PhotoGrid = memo(function PhotoGrid({ loadBuckets, loadBucket, onOp
     };
   }
 
+  // Stable: reads `loaded` via ref, so it never changes identity. Passed to
+  // every section as-is.
+  const ensureBucket = useCallback(
+    (tb: string) => {
+      if (loadedRef.current[tb] || loadingRef.current.has(tb)) return;
+      loadingRef.current.add(tb);
+      loadBucket(tb)
+        .then((cols) => setLoaded((m) => ({ ...m, [tb]: flattenBucket(cols) })))
+        .catch((e) => reportError(new Error(`Failed to load bucket ${tb}: ${describeError(e)}`)))
+        .finally(() => loadingRef.current.delete(tb));
+    },
+    [loadBucket],
+  );
+
   useEffect(() => {
     setFetched(false);
     loadBuckets()
-      .then(setBuckets)
+      .then((b) => {
+        setBuckets(b);
+        // Eagerly prefetch the first visible bucket so initial photos render
+        // immediately without waiting for observer ticks.
+        if (b.length > 0) ensureBucket(b[0].timeBucket);
+      })
       .catch((e) => setError(e?.message || 'Failed to load timeline'))
       .finally(() => setFetched(true));
-  }, [loadBuckets]);
+  }, [loadBuckets, ensureBucket]);
 
   useEffect(() => {
     const onResize = () => {
@@ -104,20 +123,6 @@ export const PhotoGrid = memo(function PhotoGrid({ loadBuckets, loadBucket, onOp
     onAssetsChangeRef.current?.(flatRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
-
-  // Stable: reads `loaded` via ref, so it never changes identity. Passed to
-  // every section as-is.
-  const ensureBucket = useCallback(
-    (tb: string) => {
-      if (loadedRef.current[tb] || loadingRef.current.has(tb)) return;
-      loadingRef.current.add(tb);
-      loadBucket(tb)
-        .then((cols) => setLoaded((m) => ({ ...m, [tb]: flattenBucket(cols) })))
-        .catch((e) => reportError(new Error(`Failed to load bucket ${tb}: ${describeError(e)}`)))
-        .finally(() => loadingRef.current.delete(tb));
-    },
-    [loadBucket],
-  );
 
   // Stable: resolves the bucket-local index to a global one against the latest
   // flat list (read from refs) at click time.

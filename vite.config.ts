@@ -54,9 +54,9 @@ export default defineConfig({
   base: './',
   plugins: [preact(), webosClassicScript(), stampAppinfoVersion()],
   build: {
-    // chrome58 keeps JS syntax compatible with webOS 5.0+ (Chromium 68); webOS
-    // 6.x is Chromium 79. (CSS feature support is handled in global.css.)
-    target: 'chrome58',
+    // chrome53 keeps JS syntax compatible with webOS 4.x+ (Chromium 53 on
+    // webOS 4.0/4.4/LG B8); webOS 5.0+ is Chromium 68; webOS 6.x is Chromium 79.
+    target: 'chrome53',
     assetsInlineLimit: 0,
     cssCodeSplit: false,
     // no module-preload polyfill — it injects modulepreload <link>s a classic

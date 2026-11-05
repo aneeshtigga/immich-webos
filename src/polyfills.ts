@@ -1,5 +1,5 @@
 // webOS ships a range of Chromium versions. Older sets (webOS 4.x / Chromium
-// 53) predate Promise.prototype.finally (Chrome 63). Vite's `target: chrome58`
+// 53, e.g. LG B8/C8) predate Promise.prototype.finally (Chrome 63). Vite's `target: chrome53`
 // only downlevels *syntax*, not runtime APIs, so the app boots straight into
 // "TypeError: ...finally is not a function" on those TVs. Add finally back.
 // String.prototype.padStart is Chrome 57. The 2019 C9 (OLED77C9PUB) reports
@@ -29,4 +29,27 @@ if (typeof Promise !== 'undefined' && !Promise.prototype.finally) {
         }),
     );
   };
+}
+
+// IntersectionObserverEntry.prototype.isIntersecting was introduced in Chrome 58.
+// On webOS 4.0 - 4.4 (Chromium 53, e.g. LG B8 / C8), native IntersectionObserver is present
+// but `entry.isIntersecting` is undefined. The observer callbacks check `if (inside)` which
+// evaluates to falsy, completely breaking bucket loading and thumbnail loading.
+if (
+  typeof IntersectionObserverEntry !== 'undefined' &&
+  !('isIntersecting' in IntersectionObserverEntry.prototype)
+) {
+  Object.defineProperty(IntersectionObserverEntry.prototype, 'isIntersecting', {
+    get() {
+      return (
+        this.intersectionRatio > 0 ||
+        Boolean(
+          this.intersectionRect &&
+            (this.intersectionRect.width > 0 || this.intersectionRect.height > 0),
+        )
+      );
+    },
+    configurable: true,
+    enumerable: true,
+  });
 }
