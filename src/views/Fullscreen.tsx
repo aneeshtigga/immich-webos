@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef, useCallback } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useState, useRef, useCallback } from 'preact/hooks';
 import { Asset } from '../api/assets';
-import { loadBlobUrl, loadThumb, revoke } from '../api/media';
-import { thumbnailUrl, videoStreamUrl, originalStreamUrl, getAssetLocation } from '../api/client';
+import { loadThumb } from '../api/media';
+import { getPreview, peekPreview, pinPreview, prefetchPreviews } from '../api/previewCache';
+import { videoStreamUrl, originalStreamUrl, getAssetLocation } from '../api/client';
 import { Key, isBack, dirFromKey } from '../nav/keys';
 import { Icon } from '../components/Icon';
 import {
@@ -86,7 +87,8 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const motionRef = useRef<HTMLVideoElement>(null);
-  const imgUrlRef = useRef<string | null>(null);
+  // direction of the last step (+1 next, -1 previous), so prefetch runs ahead
+  const dirRef = useRef(1);
   const hideTimer = useRef<number | undefined>(undefined);
   const resumeAt = useRef(0); // remember position across quality switch
   const seekRef = useRef<HTMLDivElement>(null);
@@ -212,22 +214,31 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     return () => { alive = false; };
   }, [asset?.id]);
 
-  // ---- photo loading (preview JPEG) ----
-  useEffect(() => {
+  // ---- photo loading (preview JPEG, via previewCache) ----
+  // Layout effect so a cached, already-decoded preview is set before the first
+  // paint of the new index: the photo appears in the same frame as the key
+  // press instead of flashing the placeholder first.
+  useLayoutEffect(() => {
     if (!asset || asset.isVideo) {
+      pinPreview(null);
       setImgSrc(null);
       setImgReady(false);
+      return;
+    }
+    pinPreview(asset.id);
+    const cached = peekPreview(asset.id);
+    if (cached) {
+      setImgSrc(cached);
+      setImgReady(true);
       return;
     }
     let alive = true;
     setImgSrc(null);
     setImgReady(false);
-    loadBlobUrl(thumbnailUrl(asset.id, 'preview'))
+    // resolves after decode, so swapping it in never stalls a frame on decode
+    getPreview(asset.id)
       .then((url) => {
-        if (!alive) return revoke(url);
-        if (imgUrlRef.current) revoke(imgUrlRef.current);
-        imgUrlRef.current = url;
-        setImgSrc(url);
+        if (alive) setImgSrc(url);
       })
       .catch(() => {});
     return () => {
@@ -235,12 +246,20 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     };
   }, [asset?.id]);
 
-  useEffect(
-    () => () => {
-      if (imgUrlRef.current) revoke(imgUrlRef.current);
-    },
-    [],
-  );
+  // Once the photo on screen is up, fetch + decode its neighbours: the next one
+  // in the direction of travel first, then the one behind, then one further on.
+  useEffect(() => {
+    if (isVideo || !imgReady) return;
+    const d = dirRef.current;
+    const ids = [i + d, i - d, i + 2 * d]
+      .filter((n) => n >= 0 && n < assets.length)
+      .map((n) => assets[n])
+      .filter((a) => a && !a.isVideo)
+      .map((a) => a.id);
+    prefetchPreviews(ids);
+  }, [i, imgReady, isVideo, assets]);
+
+  useEffect(() => () => pinPreview(null), []);
 
   // reset per-asset video state (quality is intentionally NOT reset — it carries
   // over to every video and persists across restarts)
@@ -261,6 +280,7 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
     (delta: number) => {
       const n = i + delta;
       if (n < 0 || n >= assets.length) return;
+      dirRef.current = delta >= 0 ? 1 : -1;
       setI(n);
     },
     [i, assets.length],
