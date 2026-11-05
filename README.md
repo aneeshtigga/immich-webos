@@ -32,6 +32,8 @@ A native [webOS](https://webostv.developer.lge.com/) TV app for browsing your [I
 - An [Immich](https://immich.app/) server you can reach from the TV
 - An LG TV running webOS 5.0 or above
 
+> On an older TV with webOS 3 or 4 (2016 to 2019)? Try [immich lite](https://github.com/cgbeaulieu/immich-lite).
+
 ---
 
 ## Install guide
