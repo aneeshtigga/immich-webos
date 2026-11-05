@@ -111,21 +111,31 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
   // clear it for plain photos, videos, or when the preference is off. Reads the
   // preference via a ref so toggling it doesn't re-run this (the toggle handler
   // applies the change to the current photo itself).
+  // Whether the motion clip should be showing right now. The clip's timeupdate
+  // handler reveals it (fades the still out) on its first frame; without this
+  // guard a first frame that lands just after OK turned live play off would
+  // re-reveal a clip that is about to unmount, leaving the still at opacity 0
+  // over nothing: a black, frozen screen until the next key.
+  const motionWantedRef = useRef(false);
+
   useEffect(() => {
     window.clearTimeout(motionFadeTimer.current);
     setMotionVisible(false);
-    setMotionOn(!!livePhotoId && livePlayRef.current);
+    motionWantedRef.current = !!livePhotoId && livePlayRef.current;
+    setMotionOn(motionWantedRef.current);
   }, [asset?.id, livePhotoId]);
 
   // Fade the motion clip out (revealing the still beneath) rather than cutting.
   const MOTION_FADE_MS = 600; // must match .fs-img opacity transition in CSS
   const endMotion = useCallback(() => {
+    motionWantedRef.current = false;
     setMotionVisible(false);
     window.clearTimeout(motionFadeTimer.current);
     motionFadeTimer.current = window.setTimeout(() => setMotionOn(false), MOTION_FADE_MS);
   }, []);
   const replayMotion = useCallback(() => {
     window.clearTimeout(motionFadeTimer.current);
+    motionWantedRef.current = true;
     setMotionVisible(false); // stays transparent until the first frame decodes
     setMotionOn(true);
   }, []);
@@ -596,12 +606,18 @@ export function Fullscreen({ assets, index, onClose, onNearEnd }: Props) {
               // then punches a black frame mid-fade; waiting for currentTime > 0
               // guarantees a real frame is on the plane before the still fades.
               onTimeUpdate={() => {
-                if ((motionRef.current?.currentTime ?? 0) > 0) setMotionVisible(true);
+                if (motionWantedRef.current && (motionRef.current?.currentTime ?? 0) > 0) setMotionVisible(true);
               }}
               onWaiting={() => { void motionRef.current?.play().catch(() => {}); }}
               onStalled={() => { void motionRef.current?.play().catch(() => {}); }}
               onEnded={endMotion}
-              onError={() => setMotionOn(false)}
+              // un-hide the still too: a clip that errors after revealing would
+              // otherwise unmount and leave the still at opacity 0
+              onError={() => {
+                motionWantedRef.current = false;
+                setMotionVisible(false);
+                setMotionOn(false);
+              }}
             />
           )}
           {/* still sits ON TOP of the motion clip and fades OUT to reveal it,
