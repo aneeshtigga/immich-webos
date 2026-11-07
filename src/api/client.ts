@@ -461,6 +461,17 @@ export interface Place {
   assetId: string; // representative asset for the cover thumbnail
 }
 
+export interface MapMarker {
+  id: string;
+  lat: number;
+  lon: number;
+  city?: string;
+}
+
+export async function getMapMarkers(): Promise<MapMarker[]> {
+  return jsonReq<MapMarker[]>('/map/markers');
+}
+
 // GET /search/explore returns grouped aggregations; we surface the city group.
 export async function getPlaces(): Promise<Place[]> {
   const groups = await jsonReq<

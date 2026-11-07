@@ -27,6 +27,7 @@ import { Albums, AlbumsRestore } from './Albums';
 import { Search } from './Search';
 import { Fullscreen } from './Fullscreen';
 import { Wallpaper, resetWallpaperCaches } from './Wallpaper';
+import { MapView } from './MapView';
 import { AccountPill } from './AccountPill';
 import { getActiveProfileId, removeProfile } from '../auth/profiles';
 import { useRemote } from '../nav/useRemote';
@@ -68,6 +69,7 @@ export function Home({ onLogout }: { onLogout: () => void }) {
   // position is already intact — only focus needs returning.
   const lastContentFocus = useRef<HTMLElement | null>(null);
   const loadNextRef = useRef<(() => void) | null>(null);
+  const mapKeyHandler = useRef<((code: number) => boolean) | null>(null);
   // Albums-list scroll + focus to restore when returning from an opened album.
   const albumsRestore = useRef<AlbumsRestore | null>(null);
   const viewerRef = useRef(viewer);
@@ -291,7 +293,10 @@ export function Home({ onLogout }: { onLogout: () => void }) {
 
   // disable the grid/sidebar remote handler while an overlay that owns the keys
   // is up — the fullscreen viewer, the logout dialog, or the wallpaper slideshow
-  useRemote({ onBack, onEdge, enabled: !viewer && !confirmLogout && !(accountsAnchor && !accountsHover) && !wpFullscreen });
+  const onKey = useCallback((code: number) => {
+    return route === 'map' ? mapKeyHandler.current?.(code) ?? false : false;
+  }, [route]);
+  useRemote({ onBack, onEdge, onKey, enabled: !viewer && !confirmLogout && !(accountsAnchor && !accountsHover) && !wpFullscreen });
 
   const navigate = (r: Route) => {
     albumsRestore.current = null;
@@ -520,6 +525,8 @@ export function Home({ onLogout }: { onLogout: () => void }) {
             />
           ) : route === 'search' ? (
             <Search onOpen={openViewer} />
+          ) : route === 'map' ? (
+            <MapView onOpen={openViewer} keyHandlerRef={mapKeyHandler} />
           ) : route === 'wallpaper' ? (
             <Wallpaper backRef={wallpaperBack} onFullscreen={setWpFullscreen} />
           ) : (
