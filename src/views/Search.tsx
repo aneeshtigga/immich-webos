@@ -265,6 +265,7 @@ export function Search({ onOpen }: { onOpen: (assets: Asset[], index: number) =>
                       assetId={a.id}
                       isVideo={a.isVideo}
                       duration={a.duration}
+                      isLive={!!a.livePhotoVideoId}
                       width={a.w}
                       height={a.h}
                       onSelect={() => onOpen(results!, myIdx)}

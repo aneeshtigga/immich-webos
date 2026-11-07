@@ -398,11 +398,13 @@ function mapAsset(a: AssetResponseDto): import('./assets').Asset {
   };
 }
 
+const TIMELINE_ONLY = { visibility: 'timeline', isVisible: true };
+
 // Natural-language search ("beach sunset", "dog"). POST /search/smart.
 export async function smartSearch(query: string): Promise<import('./assets').Asset[]> {
   const res = await jsonReq<{ assets: { items: AssetResponseDto[] } }>(
     '/search/smart',
-    { method: 'POST', body: JSON.stringify({ query }) },
+    { method: 'POST', body: JSON.stringify({ ...TIMELINE_ONLY, query }) },
   );
   return res.assets.items.map(mapAsset);
 }
@@ -413,7 +415,7 @@ async function metadataSearch(
 ): Promise<import('./assets').Asset[]> {
   const res = await jsonReq<{ assets: { items: AssetResponseDto[] } }>(
     '/search/metadata',
-    { method: 'POST', body: JSON.stringify(body) },
+    { method: 'POST', body: JSON.stringify({ ...TIMELINE_ONLY, ...body }) },
   );
   return res.assets.items.map(mapAsset);
 }
